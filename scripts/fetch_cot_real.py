@@ -1,77 +1,63 @@
 #!/usr/bin/env python3
 """
-CFTC COT Data Fetcher
-- Downloads historical and current COT data from CFTC
-- Parses Legacy Report format
-- Extracts data for target futures contracts
-- No API key needed — government public data
+CFTC COT Data Fetcher v2
+- Robust column name detection
+- Debug mode to inspect CSV structure
+- No API key needed
 
 Usage:
-  python fetch_cot_real.py --initial    # Download 10 years of bulk data
-  python fetch_cot_real.py --update     # Download latest week only
+  python fetch_cot_real.py --initial
+  python fetch_cot_real.py --update
+  python fetch_cot_real.py --debug
+  python fetch_cot_real.py --initial --btc-csv data/BTC_USD.csv --eth-csv data/ETH_USD.csv
 """
 
-import os
-import sys
-import csv
-import json
-import zipfile
-import io
-import argparse
+import os, sys, csv, json, zipfile, io, argparse
 from datetime import datetime, timedelta
 
-# Check for required packages
 try:
     import requests
 except ImportError:
-    print("Installing requests...")
     os.system(f"{sys.executable} -m pip install requests --break-system-packages -q")
     import requests
 
 try:
     import yfinance as yf
 except ImportError:
-    print("Installing yfinance...")
     os.system(f"{sys.executable} -m pip install yfinance --break-system-packages -q")
     import yfinance as yf
 
-# ============================================================
-# CONFIGURATION
-# ============================================================
-
-DATA_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data")
-
-# CFTC Legacy Futures-Only Report URLs
-# Annual files: https://www.cftc.gov/files/dea/history/deacot{YEAR}.zip
-# Current year: https://www.cftc.gov/files/dea/history/deacot{YEAR}.zip
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+DATA_DIR = os.path.join(os.path.dirname(SCRIPT_DIR), "data")
 CFTC_BASE_URL = "https://www.cftc.gov/files/dea/history"
 
-# Contract name patterns in CFTC data (partial match)
-CONTRACT_MAP = {
-    "BTC":     {"pattern": "BITCOIN", "exchange": "CHICAGO MERCANTILE EXCHANGE"},
-    "ETH":     {"pattern": "ETHER",   "exchange": "CHICAGO MERCANTILE EXCHANGE"},
-    "SP500":   {"pattern": "E-MINI S&P 500",     "exchange": "CHICAGO MERCANTILE EXCHANGE"},
-    "NASDAQ":  {"pattern": "NASDAQ-100",          "exchange": "CHICAGO MERCANTILE EXCHANGE"},
-    "RUSSELL": {"pattern": "E-MINI RUSSELL 2000", "exchange": "CHICAGO MERCANTILE EXCHANGE"},
-    "DXY":     {"pattern": "U.S. DOLLAR INDEX",   "exchange": "ICE FUTURES U.S."},
-    "GOLD":    {"pattern": "GOLD",                 "exchange": "COMMODITY EXCHANGE INC."},
-    "SILVER":  {"pattern": "SILVER",               "exchange": "COMMODITY EXCHANGE INC."},
-    "COPPER":  {"pattern": "COPPER",               "exchange": "COMMODITY EXCHANGE INC."},
-    "OIL":     {"pattern": "CRUDE OIL, LIGHT SWEET", "exchange": "NEW YORK MERCANTILE EXCHANGE"},
+CONTRACT_SEARCH = {
+    "BTC":     ["BITCOIN"],
+    "ETH":     ["ETHER"],
+    "SP500":   ["E-MINI S&P 500", "S&P 500"],
+    "NASDAQ":  ["NASDAQ-100", "NASDAQ 100"],
+    "RUSSELL": ["RUSSELL 2000"],
+    "DXY":     ["U.S. DOLLAR INDEX", "US DOLLAR INDEX"],
+    "GOLD":    ["GOLD"],
+    "SILVER":  ["SILVER"],
+    "COPPER":  ["COPPER"],
+    "OIL":     ["CRUDE OIL, LIGHT SWEET", "CRUDE OIL,LIGHT SWEET", "CRUDE OIL"],
 }
 
-# yfinance tickers for price data
+CONTRACT_EXCLUDE = {
+    "GOLD":   ["GOLDMAN", "GOLDENBERG", "MICRO"],
+    "SILVER": ["SILVERADO", "MICRO"],
+    "COPPER": ["MICRO"],
+    "OIL":    ["MICRO"],
+    "SP500":  ["MICRO"],
+    "NASDAQ": ["MICRO"],
+    "RUSSELL":["MICRO"],
+}
+
 PRICE_TICKERS = {
-    "BTC":     "BTC-USD",
-    "ETH":     "ETH-USD",
-    "SP500":   "^GSPC",
-    "NASDAQ":  "^IXIC",
-    "RUSSELL": "^RUT",
-    "DXY":     "DX-Y.NYB",
-    "GOLD":    "GC=F",
-    "SILVER":  "SI=F",
-    "COPPER":  "HG=F",
-    "OIL":     "CL=F",
+    "BTC": "BTC-USD", "ETH": "ETH-USD", "SP500": "^GSPC",
+    "NASDAQ": "^IXIC", "RUSSELL": "^RUT", "DXY": "DX-Y.NYB",
+    "GOLD": "GC=F", "SILVER": "SI=F", "COPPER": "HG=F", "OIL": "CL=F",
 }
 
 ASSET_NAMES = {
@@ -80,439 +66,437 @@ ASSET_NAMES = {
     "GOLD": "Gold", "SILVER": "Silver", "COPPER": "Copper", "OIL": "Crude Oil WTI"
 }
 
-Z_WINDOW = 156   # 3 years
+Z_WINDOW = 156
 Z_THRESHOLD = 1.8
 PCT_HIGH = 90
 PCT_LOW = 10
 
-# ============================================================
-# CFTC DATA DOWNLOAD
-# ============================================================
+
+def find_column(headers, candidates):
+    """Find column by trying multiple names with fuzzy matching"""
+    h_map = {}
+    for h in headers:
+        key = h.upper().strip().replace(" ","_").replace("-","_").replace("(","").replace(")","")
+        h_map[key] = h
+    
+    for c in candidates:
+        ck = c.upper().strip().replace(" ","_").replace("-","_").replace("(","").replace(")","")
+        if ck in h_map:
+            return h_map[ck]
+        for hk, ho in h_map.items():
+            if ck in hk or hk in ck:
+                return ho
+    return None
+
+
+COL_MARKET = ["Market_and_Exchange_Names", "Market and Exchange Names"]
+COL_DATE_ISO = ["Report_Date_as_YYYY-MM-DD", "Report Date as YYYY-MM-DD"]
+COL_DATE_YMD = ["As_of_Date_In_Form_YYMMDD", "As of Date in Form YYMMDD"]
+COL_OI = ["Open_Interest_All", "Open Interest (All)"]
+COL_NL = ["NonComm_Positions_Long_All", "Noncommercial Positions-Long (All)"]
+COL_NS = ["NonComm_Positions_Short_All", "Noncommercial Positions-Short (All)"]
+COL_CL = ["Comm_Positions_Long_All", "Commercial Positions-Long (All)"]
+COL_CS = ["Comm_Positions_Short_All", "Commercial Positions-Short (All)"]
+
 
 def download_cftc_year(year):
-    """Download and parse one year of CFTC Legacy Report data"""
     url = f"{CFTC_BASE_URL}/deacot{year}.zip"
     print(f"  Downloading {url}...")
-    
-    resp = requests.get(url, timeout=60)
-    if resp.status_code != 200:
-        print(f"  Warning: Could not download {year} (status {resp.status_code})")
-        return []
-    
-    # Extract CSV from zip
-    z = zipfile.ZipFile(io.BytesIO(resp.content))
-    csv_name = z.namelist()[0]
-    csv_data = z.read(csv_name).decode('utf-8', errors='replace')
-    
-    reader = csv.DictReader(io.StringIO(csv_data))
-    rows = list(reader)
-    print(f"  {year}: {len(rows)} total rows")
-    return rows
+    try:
+        resp = requests.get(url, timeout=120)
+        if resp.status_code != 200:
+            print(f"    HTTP {resp.status_code}")
+            return [], []
+        z = zipfile.ZipFile(io.BytesIO(resp.content))
+        csv_name = z.namelist()[0]
+        data = z.read(csv_name).decode('utf-8', errors='replace')
+        reader = csv.DictReader(io.StringIO(data))
+        rows = list(reader)
+        headers = list(rows[0].keys()) if rows else []
+        print(f"    {year}: {len(rows)} rows")
+        return rows, headers
+    except Exception as e:
+        print(f"    Error: {e}")
+        return [], []
 
 
-def parse_cftc_rows(rows):
-    """Extract relevant contracts from raw CFTC rows"""
-    results = {key: [] for key in CONTRACT_MAP}
+def debug_cftc(year=None):
+    if year is None:
+        year = datetime.now().year
+    rows, headers = download_cftc_year(year)
+    if not rows:
+        return
     
-    for row in rows:
-        market_name = row.get('Market_and_Exchange_Names', '').upper()
+    print(f"\n{'='*60}")
+    print(f"COLUMNS ({len(headers)}):")
+    for i, h in enumerate(headers):
+        print(f"  [{i+1}] '{h}'")
+    
+    sample = list(rows[0].keys())
+    cm = find_column(sample, COL_MARKET)
+    cd = find_column(sample, COL_DATE_ISO) or find_column(sample, COL_DATE_YMD)
+    co = find_column(sample, COL_OI)
+    cn = find_column(sample, COL_NL)
+    
+    print(f"\nDETECTED: market='{cm}' date='{cd}' oi='{co}' noncomm_l='{cn}'")
+    
+    if cm:
+        names = sorted(set(r.get(cm, '') for r in rows))
+        print(f"\nMARKET NAMES ({len(names)}):")
+        for n in names:
+            flag = ""
+            nu = n.upper()
+            for key, pats in CONTRACT_SEARCH.items():
+                for p in pats:
+                    if p in nu:
+                        excl = CONTRACT_EXCLUDE.get(key, [])
+                        if not any(e in nu for e in excl):
+                            flag = f" ✅ [{key}]"
+                        else:
+                            flag = f" ❌ [{key} excluded]"
+            print(f"  {n}{flag}")
+
+
+def parse_cftc_rows(all_rows):
+    if not all_rows:
+        return {k: [] for k in CONTRACT_SEARCH}
+    
+    sample = list(all_rows[0].keys())
+    cm = find_column(sample, COL_MARKET)
+    cd1 = find_column(sample, COL_DATE_ISO)
+    cd2 = find_column(sample, COL_DATE_YMD)
+    co = find_column(sample, COL_OI)
+    cnl = find_column(sample, COL_NL)
+    cns = find_column(sample, COL_NS)
+    ccl = find_column(sample, COL_CL)
+    ccs = find_column(sample, COL_CS)
+    
+    print(f"  Columns: market='{cm}' date='{cd1 or cd2}' oi='{co}' nl='{cnl}' cl='{ccl}'")
+    
+    if not cm:
+        print(f"  ERROR: Cannot find market column! Available: {sample[:5]}")
+        return {k: [] for k in CONTRACT_SEARCH}
+    
+    results = {k: [] for k in CONTRACT_SEARCH}
+    
+    for row in all_rows:
+        mname = row.get(cm, '').upper().strip()
         
-        for key, config in CONTRACT_MAP.items():
-            pattern = config['pattern'].upper()
-            exchange = config['exchange'].upper()
+        for key, patterns in CONTRACT_SEARCH.items():
+            matched = False
+            for pat in patterns:
+                if pat in mname:
+                    excl = CONTRACT_EXCLUDE.get(key, [])
+                    if any(e in mname for e in excl):
+                        continue
+                    matched = True
+                    break
             
-            if pattern in market_name and exchange in market_name:
-                try:
-                    # Parse date: YYMMDD or YYYY-MM-DD format
-                    date_str = row.get('As_of_Date_In_Form_YYMMDD', '')
-                    if len(date_str) == 6:
-                        # YYMMDD format
-                        yy = int(date_str[:2])
-                        year = 2000 + yy if yy < 80 else 1900 + yy
-                        month = int(date_str[2:4])
-                        day = int(date_str[4:6])
-                        date = f"{year}-{month:02d}-{day:02d}"
-                    else:
-                        date = row.get('Report_Date_as_YYYY-MM-DD', date_str)
-                    
-                    entry = {
-                        "date": date,
-                        "open_interest": int(row.get('Open_Interest_All', 0)),
-                        "noncommercial_long": int(row.get('NonComm_Positions_Long_All', 0)),
-                        "noncommercial_short": int(row.get('NonComm_Positions_Short_All', 0)),
-                        "commercial_long": int(row.get('Comm_Positions_Long_All', 0)),
-                        "commercial_short": int(row.get('Comm_Positions_Short_All', 0)),
-                    }
-                    results[key].append(entry)
-                except (ValueError, KeyError) as e:
-                    continue
-                break  # Found match, move to next row
+            if not matched:
+                continue
+            
+            # Parse date
+            ds = ""
+            if cd1:
+                ds = row.get(cd1, '').strip()
+            if not ds and cd2:
+                raw = row.get(cd2, '').strip()
+                if len(raw) == 6:
+                    yy = int(raw[:2])
+                    yr = 2000 + yy if yy < 80 else 1900 + yy
+                    ds = f"{yr}-{raw[2:4]}-{raw[4:6]}"
+            if not ds:
+                continue
+            
+            try:
+                def safe_int(v):
+                    v = str(v).strip().replace(',', '')
+                    return int(v) if v else 0
+                
+                results[key].append({
+                    "date": ds,
+                    "open_interest": safe_int(row.get(co, 0)),
+                    "noncommercial_long": safe_int(row.get(cnl, 0)),
+                    "noncommercial_short": safe_int(row.get(cns, 0)),
+                    "commercial_long": safe_int(row.get(ccl, 0)),
+                    "commercial_short": safe_int(row.get(ccs, 0)),
+                })
+            except Exception:
+                continue
+            break
     
-    # Sort by date
     for key in results:
         results[key].sort(key=lambda x: x['date'])
+        # Remove duplicates
+        seen = set()
+        unique = []
+        for r in results[key]:
+            if r['date'] not in seen:
+                seen.add(r['date'])
+                unique.append(r)
+        results[key] = unique
+        print(f"  {key}: {len(unique)} records")
     
     return results
 
 
 def download_all_cot(start_year=2015):
-    """Download all years of CFTC data"""
     current_year = datetime.now().year
     all_rows = []
-    
     for year in range(start_year, current_year + 1):
-        rows = download_cftc_year(year)
+        rows, _ = download_cftc_year(year)
         all_rows.extend(rows)
-    
+    print(f"\n  Total rows: {len(all_rows)}")
     return parse_cftc_rows(all_rows)
 
 
 def download_latest_cot():
-    """Download only current year's data"""
-    year = datetime.now().year
-    rows = download_cftc_year(year)
+    rows, _ = download_cftc_year(datetime.now().year)
     return parse_cftc_rows(rows)
 
 
-# ============================================================
-# PRICE DATA
-# ============================================================
-
 def fetch_prices(start_date="2015-01-01"):
-    """Fetch weekly price data for all assets via yfinance"""
     prices = {}
-    
     for key, ticker in PRICE_TICKERS.items():
         print(f"  Fetching {key} ({ticker})...")
         try:
             df = yf.download(ticker, start=start_date, interval="1wk", progress=False)
-            
-            # Handle multi-level columns (newer yfinance versions)
             if hasattr(df.columns, 'nlevels') and df.columns.nlevels > 1:
                 df.columns = df.columns.get_level_values(0)
-            
             if len(df) > 0:
                 price_data = []
                 close_col = df['Close']
                 for idx in df.index:
-                    date_str = idx.strftime("%Y-%m-%d") if hasattr(idx, 'strftime') else str(idx)[:10]
+                    ds = idx.strftime("%Y-%m-%d") if hasattr(idx, 'strftime') else str(idx)[:10]
                     val = close_col.loc[idx]
-                    # Handle Series vs scalar
                     if hasattr(val, 'iloc'):
                         val = val.iloc[0]
-                    price_data.append({
-                        "date": date_str,
-                        "price": round(float(val), 2)
-                    })
+                    price_data.append({"date": ds, "price": round(float(val), 2)})
                 prices[key] = price_data
-                print(f"    {key}: {len(price_data)} weekly prices")
+                print(f"    {key}: {len(price_data)} prices")
             else:
-                print(f"    {key}: No data returned")
                 prices[key] = []
         except Exception as e:
             print(f"    {key}: Error - {e}")
             prices[key] = []
-    
     return prices
 
 
 def merge_price_csv(prices, key, csv_path):
-    """Merge uploaded CSV price data with yfinance data"""
     if not os.path.exists(csv_path):
+        print(f"  CSV not found: {csv_path}")
         return prices
-    
-    csv_prices = {}
+    csv_p = {}
     with open(csv_path, 'r') as f:
-        reader = csv.DictReader(f)
-        for row in reader:
-            date = row['Date'].strip()
-            csv_prices[date] = round(float(row['Close']), 2)
-    
-    # Merge: CSV takes priority for overlapping dates
-    existing_dates = {p['date'] for p in prices.get(key, [])}
+        for row in csv.DictReader(f):
+            csv_p[row['Date'].strip()] = round(float(row['Close']), 2)
+    existing = {p['date'] for p in prices.get(key, [])}
     merged = list(prices.get(key, []))
-    
-    for date, price in csv_prices.items():
-        if date not in existing_dates:
-            merged.append({"date": date, "price": price})
-    
+    for d, p in csv_p.items():
+        if d not in existing:
+            merged.append({"date": d, "price": p})
     merged.sort(key=lambda x: x['date'])
     prices[key] = merged
-    print(f"  Merged CSV for {key}: {len(merged)} total prices")
+    print(f"  Merged {key}: {len(merged)} prices")
     return prices
 
 
-# ============================================================
-# SIGNAL CALCULATION
-# ============================================================
-
 def calculate_signals(cot_data):
-    """Calculate Z-Score, percentile, and spread signals"""
     results = []
-    
     for i, row in enumerate(cot_data):
-        comm_net = row["commercial_long"] - row["commercial_short"]
-        noncomm_net = row["noncommercial_long"] - row["noncommercial_short"]
-        spread = comm_net - noncomm_net
+        cn = row["commercial_long"] - row["commercial_short"]
+        nn = row["noncommercial_long"] - row["noncommercial_short"]
+        sp = cn - nn
         oi = row["open_interest"]
-        noncomm_long_pct = (row["noncommercial_long"] / oi * 100) if oi > 0 else 0
-        
-        # Rolling window
+        nlp = (row["noncommercial_long"] / oi * 100) if oi > 0 else 0
         ws = max(0, i - Z_WINDOW + 1)
         
-        # Z-Score of commercial net
         nets = [cot_data[j]["commercial_long"] - cot_data[j]["commercial_short"] for j in range(ws, i+1)]
         if len(nets) >= 20:
-            mean_n = sum(nets) / len(nets)
-            std_n = (sum((x - mean_n)**2 for x in nets) / len(nets)) ** 0.5
-            z = round((comm_net - mean_n) / std_n, 2) if std_n > 0 else 0
+            mn = sum(nets)/len(nets)
+            sn = (sum((x-mn)**2 for x in nets)/len(nets))**0.5
+            z = round((cn-mn)/sn, 2) if sn > 0 else 0
         else:
             z = 0
         
-        # Percentile of non-comm long % OI
         pcts = []
         for j in range(ws, i+1):
-            oi_j = cot_data[j]["open_interest"]
-            if oi_j > 0:
-                pcts.append(cot_data[j]["noncommercial_long"] / oi_j * 100)
+            oj = cot_data[j]["open_interest"]
+            if oj > 0:
+                pcts.append(cot_data[j]["noncommercial_long"]/oj*100)
         if len(pcts) >= 20:
-            rank = sum(1 for x in sorted(pcts) if x <= noncomm_long_pct)
-            percentile = round(rank / len(pcts) * 100, 1)
+            rk = sum(1 for x in pcts if x <= nlp)
+            pctile = round(rk/len(pcts)*100, 1)
         else:
-            percentile = 50
+            pctile = 50
         
-        # Spread Z-Score
-        spreads = [
-            (cot_data[j]["commercial_long"] - cot_data[j]["commercial_short"]) -
-            (cot_data[j]["noncommercial_long"] - cot_data[j]["noncommercial_short"])
-            for j in range(ws, i+1)
-        ]
-        if len(spreads) >= 20:
-            mean_s = sum(spreads) / len(spreads)
-            std_s = (sum((x - mean_s)**2 for x in spreads) / len(spreads)) ** 0.5
-            spread_z = round((spread - mean_s) / std_s, 2) if std_s > 0 else 0
+        sps = [(cot_data[j]["commercial_long"]-cot_data[j]["commercial_short"])-(cot_data[j]["noncommercial_long"]-cot_data[j]["noncommercial_short"]) for j in range(ws, i+1)]
+        if len(sps) >= 20:
+            ms = sum(sps)/len(sps)
+            ss = (sum((x-ms)**2 for x in sps)/len(sps))**0.5
+            sz = round((sp-ms)/ss, 2) if ss > 0 else 0
         else:
-            spread_z = 0
-        
-        z_sig = "bullish" if z > Z_THRESHOLD else ("bearish" if z < -Z_THRESHOLD else None)
-        pct_sig = "bearish" if percentile > PCT_HIGH else ("bullish" if percentile < PCT_LOW else None)
-        sp_sig = "bullish" if spread_z > Z_THRESHOLD else ("bearish" if spread_z < -Z_THRESHOLD else None)
+            sz = 0
         
         results.append({
-            "date": row["date"],
-            "commercial_net": comm_net,
-            "noncommercial_net": noncomm_net,
-            "noncomm_long_pct_oi": round(noncomm_long_pct, 2),
-            "spread": spread,
-            "z_score": z,
-            "percentile": percentile,
-            "spread_z": spread_z,
-            "z_signal": z_sig,
-            "pct_signal": pct_sig,
-            "spread_signal": sp_sig,
+            "date": row["date"], "commercial_net": cn, "noncommercial_net": nn,
+            "noncomm_long_pct_oi": round(nlp, 2), "spread": sp,
+            "z_score": z, "percentile": pctile, "spread_z": sz,
+            "z_signal": "bullish" if z > Z_THRESHOLD else ("bearish" if z < -Z_THRESHOLD else None),
+            "pct_signal": "bearish" if pctile > PCT_HIGH else ("bullish" if pctile < PCT_LOW else None),
+            "spread_signal": "bullish" if sz > Z_THRESHOLD else ("bearish" if sz < -Z_THRESHOLD else None),
         })
-    
     return results
 
 
-def build_signal_history(prices_list, signals, lookahead=[4, 8, 13, 26]):
-    """Calculate returns after each signal"""
-    history = []
-    
-    for i, sig in enumerate(signals):
-        for stype, skey in [("z_score", "z_signal"), ("pct_oi", "pct_signal"), ("spread", "spread_signal")]:
-            if sig[skey] is not None and i < len(prices_list):
-                entry = {
-                    "date": sig["date"],
-                    "type": stype,
-                    "direction": sig[skey],
-                    "price_at_signal": prices_list[i],
-                    "z_score": sig["z_score"],
-                    "percentile": sig["percentile"],
-                    "spread_z": sig["spread_z"],
-                    "returns": {}
-                }
-                for w in lookahead:
+def build_signal_history(pl, signals):
+    hist = []
+    for i, s in enumerate(signals):
+        for st, sk in [("z_score","z_signal"),("pct_oi","pct_signal"),("spread","spread_signal")]:
+            if s[sk] and i < len(pl) and pl[i] > 0:
+                e = {"date":s["date"],"type":st,"direction":s[sk],"price_at_signal":pl[i],
+                     "z_score":s["z_score"],"percentile":s["percentile"],"spread_z":s["spread_z"],"returns":{}}
+                for w in [4,8,13,26]:
                     fi = i + w
-                    if fi < len(prices_list):
-                        ret = round((prices_list[fi] - prices_list[i]) / prices_list[i] * 100, 2)
-                        entry["returns"][f"{w}w"] = ret
+                    if fi < len(pl) and pl[i] > 0:
+                        e["returns"][f"{w}w"] = round((pl[fi]-pl[i])/pl[i]*100, 2)
                     else:
-                        entry["returns"][f"{w}w"] = None
-                history.append(entry)
-    
-    return history
+                        e["returns"][f"{w}w"] = None
+                hist.append(e)
+    return hist
 
-
-# ============================================================
-# MERGE COT + PRICES → FINAL JSON
-# ============================================================
 
 def build_dashboard_data(cot_all, prices_all):
-    """Combine COT and price data into dashboard format"""
     result = {}
-    
-    for key in CONTRACT_MAP:
-        cot_data = cot_all.get(key, [])
-        price_data = prices_all.get(key, [])
-        
-        if not cot_data:
+    for key in CONTRACT_SEARCH:
+        cot = cot_all.get(key, [])
+        pd = prices_all.get(key, [])
+        if not cot:
             print(f"  {key}: No COT data, skipping")
             continue
         
-        # Build price lookup
-        price_map = {p["date"]: p["price"] for p in price_data}
+        pm = {p["date"]: p["price"] for p in pd}
+        pds = sorted(pm.keys())
         
-        # Align prices with COT dates (find nearest)
-        aligned_prices = []
-        price_dates = sorted(price_map.keys())
-        
-        for cot_row in cot_data:
-            cot_date = cot_row["date"]
-            if cot_date in price_map:
-                aligned_prices.append(price_map[cot_date])
+        ap = []
+        for c in cot:
+            cd = c["date"]
+            if cd in pm:
+                ap.append(pm[cd])
             else:
-                # Find nearest price within 7 days
-                best = None
-                best_diff = 999
-                for pd in price_dates:
-                    try:
-                        diff = abs((datetime.strptime(pd, "%Y-%m-%d") - datetime.strptime(cot_date, "%Y-%m-%d")).days)
-                        if diff < best_diff:
-                            best_diff = diff
-                            best = price_map[pd]
-                    except:
-                        continue
-                aligned_prices.append(best if best else 0)
+                best, bd = 0, 999
+                try:
+                    cdt = datetime.strptime(cd, "%Y-%m-%d")
+                    for p in pds:
+                        d = abs((datetime.strptime(p, "%Y-%m-%d") - cdt).days)
+                        if d < bd:
+                            bd = d
+                            best = pm[p]
+                except:
+                    pass
+                ap.append(best)
         
-        # Fill zeros
-        for i in range(len(aligned_prices)):
-            if aligned_prices[i] == 0 and i > 0:
-                aligned_prices[i] = aligned_prices[i-1]
+        for i in range(len(ap)):
+            if ap[i] == 0 and i > 0:
+                ap[i] = ap[i-1]
         
-        # Calculate signals
-        signals = calculate_signals(cot_data)
-        signal_history = build_signal_history(aligned_prices, signals)
+        sigs = calculate_signals(cot)
+        sh = build_signal_history(ap, sigs)
         
-        # Build merged weekly data
-        weekly_data = []
-        for i in range(len(cot_data)):
-            weekly_data.append({
-                "date": cot_data[i]["date"],
-                "price": round(aligned_prices[i], 2) if i < len(aligned_prices) else 0,
-                "open_interest": cot_data[i]["open_interest"],
-                "commercial_long": cot_data[i]["commercial_long"],
-                "commercial_short": cot_data[i]["commercial_short"],
-                "noncommercial_long": cot_data[i]["noncommercial_long"],
-                "noncommercial_short": cot_data[i]["noncommercial_short"],
-                **signals[i],
+        wd = []
+        for i in range(len(cot)):
+            wd.append({
+                "date": cot[i]["date"],
+                "price": round(ap[i], 2) if i < len(ap) else 0,
+                "open_interest": cot[i]["open_interest"],
+                "commercial_long": cot[i]["commercial_long"],
+                "commercial_short": cot[i]["commercial_short"],
+                "noncommercial_long": cot[i]["noncommercial_long"],
+                "noncommercial_short": cot[i]["noncommercial_short"],
+                **sigs[i],
             })
         
         result[key] = {
-            "name": ASSET_NAMES[key],
-            "ticker": PRICE_TICKERS[key],
-            "cot_code": CONTRACT_MAP[key]["pattern"],
-            "data": weekly_data,
-            "signal_history": signal_history,
+            "name": ASSET_NAMES[key], "ticker": PRICE_TICKERS[key],
+            "cot_code": CONTRACT_SEARCH[key][0], "data": wd, "signal_history": sh,
         }
-        
-        latest = weekly_data[-1] if weekly_data else {}
-        print(f"  {key}: {len(weekly_data)} weeks, z={latest.get('z_score','-')}, pct={latest.get('percentile','-')}")
-    
+        lt = wd[-1] if wd else {}
+        print(f"  {key}: {len(wd)} weeks, z={lt.get('z_score','-')}, pct={lt.get('percentile','-')}")
     return result
 
 
-# ============================================================
-# MAIN
-# ============================================================
-
 def main():
-    parser = argparse.ArgumentParser(description="COT Dashboard Data Fetcher")
-    parser.add_argument('--initial', action='store_true', help='Download 10 years of historical data')
-    parser.add_argument('--update', action='store_true', help='Update with latest weekly data')
-    parser.add_argument('--start-year', type=int, default=2015, help='Start year for initial download')
-    parser.add_argument('--btc-csv', type=str, default=None, help='Path to BTC CSV file')
-    parser.add_argument('--eth-csv', type=str, default=None, help='Path to ETH CSV file')
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--initial', action='store_true')
+    parser.add_argument('--update', action='store_true')
+    parser.add_argument('--debug', action='store_true')
+    parser.add_argument('--debug-year', type=int, default=None)
+    parser.add_argument('--start-year', type=int, default=2015)
+    parser.add_argument('--btc-csv', type=str, default=None)
+    parser.add_argument('--eth-csv', type=str, default=None)
     args = parser.parse_args()
     
+    if args.debug:
+        debug_cftc(args.debug_year)
+        return
+    
     if not args.initial and not args.update:
-        print("Usage: python fetch_cot_real.py --initial  or  --update")
+        print("Usage: --initial | --update | --debug")
         sys.exit(1)
     
     os.makedirs(DATA_DIR, exist_ok=True)
-    output_path = os.path.join(DATA_DIR, "cot_dashboard_data.json")
+    out = os.path.join(DATA_DIR, "cot_dashboard_data.json")
     
     if args.initial:
-        print("=== INITIAL LOAD: Downloading historical CFTC data ===")
-        print(f"Years: {args.start_year} - {datetime.now().year}")
-        cot_all = download_all_cot(start_year=args.start_year)
-        
-        for key in cot_all:
-            print(f"  {key}: {len(cot_all[key])} COT records")
-    
-    elif args.update:
-        print("=== WEEKLY UPDATE ===")
-        # Load existing data
-        if os.path.exists(output_path):
-            with open(output_path, 'r') as f:
+        print(f"=== INITIAL: {args.start_year}-{datetime.now().year} ===")
+        cot_all = download_all_cot(args.start_year)
+    else:
+        if os.path.exists(out):
+            with open(out) as f:
                 existing = json.load(f)
+            latest = download_latest_cot()
+            cot_all = {}
+            for key in CONTRACT_SEARCH:
+                ec = []
+                ed = set()
+                if key in existing:
+                    for r in existing[key].get("data", []):
+                        ed.add(r["date"])
+                        ec.append({k: r[k] for k in ["date","open_interest","commercial_long","commercial_short","noncommercial_long","noncommercial_short"]})
+                nc = 0
+                for r in latest.get(key, []):
+                    if r["date"] not in ed:
+                        ec.append(r)
+                        nc += 1
+                ec.sort(key=lambda x: x["date"])
+                cot_all[key] = ec
+                if nc: print(f"  {key}: +{nc} new")
         else:
-            print("No existing data found. Run --initial first.")
-            sys.exit(1)
-        
-        # Download latest
-        latest_cot = download_latest_cot()
-        
-        # Merge with existing COT data
-        cot_all = {}
-        for key in CONTRACT_MAP:
-            existing_dates = set()
-            existing_cot = []
-            if key in existing:
-                for row in existing[key].get("data", []):
-                    existing_dates.add(row["date"])
-                    existing_cot.append({
-                        "date": row["date"],
-                        "open_interest": row["open_interest"],
-                        "commercial_long": row["commercial_long"],
-                        "commercial_short": row["commercial_short"],
-                        "noncommercial_long": row["noncommercial_long"],
-                        "noncommercial_short": row["noncommercial_short"],
-                    })
-            
-            # Add new rows
-            new_count = 0
-            for row in latest_cot.get(key, []):
-                if row["date"] not in existing_dates:
-                    existing_cot.append(row)
-                    new_count += 1
-            
-            existing_cot.sort(key=lambda x: x["date"])
-            cot_all[key] = existing_cot
-            print(f"  {key}: +{new_count} new records")
+            print("No existing data. Running --initial...")
+            cot_all = download_all_cot()
     
-    # Fetch prices
-    print("\n=== Fetching price data ===")
-    prices_all = fetch_prices(start_date=f"{args.start_year if args.initial else datetime.now().year}-01-01")
+    total = sum(len(v) for v in cot_all.values())
+    if total == 0:
+        print("\n⚠️  No COT data matched! Run --debug to inspect:")
+        print("  python fetch_cot_real.py --debug")
+        sys.exit(1)
     
-    # Merge CSV files if provided
+    print("\n=== Fetching prices ===")
+    start = f"{args.start_year}-01-01" if args.initial else f"{datetime.now().year}-01-01"
+    prices = fetch_prices(start)
     if args.btc_csv:
-        prices_all = merge_price_csv(prices_all, "BTC", args.btc_csv)
+        prices = merge_price_csv(prices, "BTC", args.btc_csv)
     if args.eth_csv:
-        prices_all = merge_price_csv(prices_all, "ETH", args.eth_csv)
+        prices = merge_price_csv(prices, "ETH", args.eth_csv)
     
-    # Build final dashboard data
-    print("\n=== Building dashboard data ===")
-    dashboard_data = build_dashboard_data(cot_all, prices_all)
+    print("\n=== Building dashboard ===")
+    data = build_dashboard_data(cot_all, prices)
     
-    # Save
-    with open(output_path, 'w') as f:
-        json.dump(dashboard_data, f)
+    with open(out, 'w') as f:
+        json.dump(data, f)
     
-    size_mb = os.path.getsize(output_path) / 1024 / 1024
-    print(f"\nSaved to {output_path} ({size_mb:.1f} MB)")
-    print("Done!")
-
+    mb = os.path.getsize(out)/1024/1024
+    print(f"\n✅ Saved: {out} ({mb:.1f} MB)")
 
 if __name__ == "__main__":
     main()
