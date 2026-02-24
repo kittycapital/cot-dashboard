@@ -247,20 +247,31 @@ def fetch_prices(start_date="2015-01-01"):
     for key, ticker in PRICE_TICKERS.items():
         print(f"  {key} ({ticker})...", end=" ", flush=True)
         try:
-            df = yf.download(ticker, start=start_date, interval="1d", progress=False)
+            df = yf.download(ticker, period="max", interval="1d", progress=False)
             if hasattr(df.columns, 'nlevels') and df.columns.nlevels > 1:
                 df.columns = df.columns.get_level_values(0)
             if len(df) > 0:
+                df = df[df.index >= start_date]
+            if len(df) > 0:
                 pdata = []
-                cc = df['Close']
                 for idx in df.index:
                     ds = idx.strftime("%Y-%m-%d") if hasattr(idx, 'strftime') else str(idx)[:10]
-                    val = cc.loc[idx]
-                    if hasattr(val, 'iloc'):
-                        val = val.iloc[0]
-                    pdata.append({"date": ds, "price": round(float(val), 2)})
+                    try:
+                        val = df.loc[idx, 'Close']
+                        if hasattr(val, 'iloc'):
+                            val = val.iloc[0]
+                        if hasattr(val, 'item'):
+                            val = val.item()
+                        val = float(val)
+                        if val > 0:
+                            pdata.append({"date": ds, "price": round(val, 2)})
+                    except:
+                        continue
                 prices[key] = pdata
-                print(f"{len(pdata)} prices")
+                if pdata:
+                    print(f"{len(pdata)} prices ({pdata[0]['date']} to {pdata[-1]['date']})")
+                else:
+                    print("no valid prices")
             else:
                 prices[key] = []
                 print("no data")
@@ -477,11 +488,24 @@ def main():
     
     print(f"\n=== Fetching prices ===")
     start = f"{args.start_year}-01-01" if args.initial else f"{datetime.now().year}-01-01"
-    prices = fetch_prices(start)
+    
+    # Load CSV price data FIRST (primary source for BTC/ETH)
+    prices = {k: [] for k in ALL_KEYS}
     if args.btc_csv:
         prices = merge_price_csv(prices, "BTC", args.btc_csv)
     if args.eth_csv:
         prices = merge_price_csv(prices, "ETH", args.eth_csv)
+    
+    # Then fetch yfinance for all assets (supplements CSV data)
+    yf_prices = fetch_prices(start)
+    for key in ALL_KEYS:
+        existing_dates = {p['date'] for p in prices[key]}
+        for p in yf_prices.get(key, []):
+            if p['date'] not in existing_dates:
+                prices[key].append(p)
+        prices[key].sort(key=lambda x: x['date'])
+        if prices[key]:
+            print(f"  {key} total: {len(prices[key])} prices ({prices[key][0]['date']} to {prices[key][-1]['date']})")
     
     print(f"\n=== Building dashboard ===")
     data = build_dashboard_data(cot_all, prices)
