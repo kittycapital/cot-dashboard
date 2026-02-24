@@ -28,7 +28,13 @@ jobs:
 
       - name: Update COT data
         run: |
-          python scripts/fetch_cot_real.py --update
+          if [ -f data/cot_dashboard_data.json ]; then
+            echo "Existing data found, running weekly update..."
+            python scripts/fetch_cot_real.py --update
+          else
+            echo "No existing data, running initial load..."
+            python scripts/fetch_cot_real.py --initial
+          fi
 
       - name: Commit and push
         run: |
