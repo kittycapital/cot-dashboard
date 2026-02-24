@@ -361,36 +361,37 @@ def build_dashboard_data(cot_all, prices_all):
         
         pm = {p["date"]: p["price"] for p in pd_list}
         pds = sorted(pm.keys())
+        print(f"  {key}: {len(cot)} COT records, {len(pm)} price records (date range: {pds[0] if pds else 'N/A'} to {pds[-1] if pds else 'N/A'})")
         
         ap = []
-        from bisect import bisect_left
+        from datetime import timedelta as td
         for c in cot:
             cd = c["date"]
-            if cd in pm:
-                ap.append(pm[cd])
-            else:
-                # Binary search for nearest date
-                idx = bisect_left(pds, cd)
-                best = 0
-                candidates = []
-                if idx > 0:
-                    candidates.append(pds[idx-1])
-                if idx < len(pds):
-                    candidates.append(pds[idx])
-                best_diff = 999
-                for cand in candidates:
-                    try:
-                        diff = abs((datetime.strptime(cand, "%Y-%m-%d") - datetime.strptime(cd, "%Y-%m-%d")).days)
-                        if diff < best_diff and diff <= 7:
-                            best_diff = diff
-                            best = pm[cand]
-                    except:
-                        pass
-                ap.append(best)
+            price = pm.get(cd)
+            # Try nearby dates: exact, then +/-1, +/-2, ... +/-5 days
+            if price is None:
+                try:
+                    base = datetime.strptime(cd, "%Y-%m-%d")
+                    for offset in range(1, 6):
+                        for sign in [1, -1]:
+                            nearby = (base + td(days=offset * sign)).strftime("%Y-%m-%d")
+                            if nearby in pm:
+                                price = pm[nearby]
+                                break
+                        if price is not None:
+                            break
+                except:
+                    pass
+            ap.append(price if price is not None else 0)
         
-        for i in range(len(ap)):
-            if ap[i] == 0 and i > 0:
+        # Forward fill zeros
+        for i in range(1, len(ap)):
+            if ap[i] == 0:
                 ap[i] = ap[i-1]
+        # Backward fill (if first entries are 0)
+        for i in range(len(ap)-2, -1, -1):
+            if ap[i] == 0:
+                ap[i] = ap[i+1]
         
         sigs = calculate_signals(cot)
         sh = build_signal_history(ap, sigs)
@@ -413,7 +414,8 @@ def build_dashboard_data(cot_all, prices_all):
             "cot_code": key, "data": wd, "signal_history": sh,
         }
         lt = wd[-1] if wd else {}
-        print(f"  {key}: {len(wd)} weeks, z={lt.get('z_score','-')}, pct={lt.get('percentile','-')}")
+        nonzero = sum(1 for p in ap if p > 0)
+        print(f"  {key}: {len(wd)} weeks, prices={nonzero}/{len(ap)}, z={lt.get('z_score','-')}, pct={lt.get('percentile','-')}")
     return result
 
 
