@@ -1,19 +1,9 @@
 #!/usr/bin/env python3
 """
-CFTC COT Data Fetcher v2
-- Robust column name detection
-- Debug mode to inspect CSV structure
-- No API key needed
-
-Usage:
-  python fetch_cot_real.py --initial
-  python fetch_cot_real.py --update
-  python fetch_cot_real.py --debug
-  python fetch_cot_real.py --initial --btc-csv data/BTC_USD.csv --eth-csv data/ETH_USD.csv
+CFTC COT Data Fetcher v3 - Exact contract name matching
 """
-
 import os, sys, csv, json, zipfile, io, argparse
-from datetime import datetime, timedelta
+from datetime import datetime
 
 try:
     import requests
@@ -31,27 +21,30 @@ SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.path.join(os.path.dirname(SCRIPT_DIR), "data")
 CFTC_BASE_URL = "https://www.cftc.gov/files/dea/history"
 
-CONTRACT_SEARCH = {
-    "BTC":     ["BITCOIN"],
-    "ETH":     ["ETHER"],
-    "SP500":   ["E-MINI S&P 500", "S&P 500"],
-    "NASDAQ":  ["NASDAQ-100", "NASDAQ 100"],
-    "RUSSELL": ["RUSSELL 2000"],
-    "DXY":     ["U.S. DOLLAR INDEX", "US DOLLAR INDEX"],
-    "GOLD":    ["GOLD"],
-    "SILVER":  ["SILVER"],
-    "COPPER":  ["COPPER"],
-    "OIL":     ["CRUDE OIL, LIGHT SWEET", "CRUDE OIL,LIGHT SWEET", "CRUDE OIL"],
-}
-
-CONTRACT_EXCLUDE = {
-    "GOLD":   ["GOLDMAN", "GOLDENBERG", "MICRO"],
-    "SILVER": ["SILVERADO", "MICRO"],
-    "COPPER": ["MICRO"],
-    "OIL":    ["MICRO"],
-    "SP500":  ["MICRO"],
-    "NASDAQ": ["MICRO"],
-    "RUSSELL":["MICRO"],
+# EXACT full market names - no fuzzy matching
+CONTRACT_EXACT_NAMES = {
+    "BITCOIN - CHICAGO MERCANTILE EXCHANGE": "BTC",
+    "ETHER CASH SETTLED - CHICAGO MERCANTILE EXCHANGE": "ETH",
+    "E-MINI S&P 500 - CHICAGO MERCANTILE EXCHANGE": "SP500",
+    "S&P 500 Consolidated - CHICAGO MERCANTILE EXCHANGE": "SP500",
+    "S&P 500 STOCK INDEX (COMBINED) - CHICAGO MERCANTILE EXCHANGE": "SP500",
+    "NASDAQ-100 Consolidated - CHICAGO MERCANTILE EXCHANGE": "NASDAQ",
+    "NASDAQ-100 - CHICAGO MERCANTILE EXCHANGE": "NASDAQ",
+    "E-MINI NASDAQ-100 - CHICAGO MERCANTILE EXCHANGE": "NASDAQ",
+    "NASDAQ-100 STOCK INDEX (COMBINED) - CHICAGO MERCANTILE EXCHANGE": "NASDAQ",
+    "RUSSELL E-MINI - CHICAGO MERCANTILE EXCHANGE": "RUSSELL",
+    "E-MINI RUSSELL 2000 - CHICAGO MERCANTILE EXCHANGE": "RUSSELL",
+    "RUSSELL 2000 MINI - CHICAGO MERCANTILE EXCHANGE": "RUSSELL",
+    "USD INDEX - ICE FUTURES U.S.": "DXY",
+    "U.S. DOLLAR INDEX - ICE FUTURES U.S.": "DXY",
+    "GOLD - COMMODITY EXCHANGE INC.": "GOLD",
+    "SILVER - COMMODITY EXCHANGE INC.": "SILVER",
+    "COPPER- #1 - COMMODITY EXCHANGE INC.": "COPPER",
+    "COPPER-GRADE #1 - COMMODITY EXCHANGE INC.": "COPPER",
+    "COPPER - COMMODITY EXCHANGE INC.": "COPPER",
+    "CRUDE OIL, LIGHT SWEET - NEW YORK MERCANTILE EXCHANGE": "OIL",
+    "CRUDE OIL,LIGHT SWEET - NEW YORK MERCANTILE EXCHANGE": "OIL",
+    "WTI FINANCIAL CRUDE OIL - NEW YORK MERCANTILE EXCHANGE": "OIL",
 }
 
 PRICE_TICKERS = {
@@ -63,22 +56,28 @@ PRICE_TICKERS = {
 ASSET_NAMES = {
     "BTC": "Bitcoin", "ETH": "Ethereum", "SP500": "S&P 500",
     "NASDAQ": "Nasdaq 100", "RUSSELL": "Russell 2000", "DXY": "US Dollar Index",
-    "GOLD": "Gold", "SILVER": "Silver", "COPPER": "Copper", "OIL": "Crude Oil WTI"
+    "GOLD": "Gold", "SILVER": "Silver", "COPPER": "Copper", "OIL": "Crude Oil WTI",
 }
 
+ALL_KEYS = ["BTC","ETH","SP500","NASDAQ","RUSSELL","DXY","GOLD","SILVER","COPPER","OIL"]
 Z_WINDOW = 156
 Z_THRESHOLD = 1.8
 PCT_HIGH = 90
 PCT_LOW = 10
 
+# Build case-insensitive lookup
+_LOOKUP = {k.upper().strip(): v for k, v in CONTRACT_EXACT_NAMES.items()}
+
+
+def match_contract(market_name):
+    return _LOOKUP.get(market_name.upper().strip())
+
 
 def find_column(headers, candidates):
-    """Find column by trying multiple names with fuzzy matching"""
     h_map = {}
     for h in headers:
         key = h.upper().strip().replace(" ","_").replace("-","_").replace("(","").replace(")","")
         h_map[key] = h
-    
     for c in candidates:
         ck = c.upper().strip().replace(" ","_").replace("-","_").replace("(","").replace(")","")
         if ck in h_map:
@@ -87,7 +86,6 @@ def find_column(headers, candidates):
             if ck in hk or hk in ck:
                 return ho
     return None
-
 
 COL_MARKET = ["Market_and_Exchange_Names", "Market and Exchange Names"]
 COL_DATE_ISO = ["Report_Date_as_YYYY-MM-DD", "Report Date as YYYY-MM-DD"]
@@ -101,11 +99,11 @@ COL_CS = ["Comm_Positions_Short_All", "Commercial Positions-Short (All)"]
 
 def download_cftc_year(year):
     url = f"{CFTC_BASE_URL}/deacot{year}.zip"
-    print(f"  Downloading {url}...")
+    print(f"  Downloading {year}...", end=" ", flush=True)
     try:
         resp = requests.get(url, timeout=120)
         if resp.status_code != 200:
-            print(f"    HTTP {resp.status_code}")
+            print(f"HTTP {resp.status_code}")
             return [], []
         z = zipfile.ZipFile(io.BytesIO(resp.content))
         csv_name = z.namelist()[0]
@@ -113,10 +111,10 @@ def download_cftc_year(year):
         reader = csv.DictReader(io.StringIO(data))
         rows = list(reader)
         headers = list(rows[0].keys()) if rows else []
-        print(f"    {year}: {len(rows)} rows")
+        print(f"{len(rows)} rows")
         return rows, headers
     except Exception as e:
-        print(f"    Error: {e}")
+        print(f"Error: {e}")
         return [], []
 
 
@@ -128,38 +126,41 @@ def debug_cftc(year=None):
         return
     
     print(f"\n{'='*60}")
-    print(f"COLUMNS ({len(headers)}):")
-    for i, h in enumerate(headers):
-        print(f"  [{i+1}] '{h}'")
-    
     sample = list(rows[0].keys())
     cm = find_column(sample, COL_MARKET)
     cd = find_column(sample, COL_DATE_ISO) or find_column(sample, COL_DATE_YMD)
     co = find_column(sample, COL_OI)
-    cn = find_column(sample, COL_NL)
-    
-    print(f"\nDETECTED: market='{cm}' date='{cd}' oi='{co}' noncomm_l='{cn}'")
+    print(f"DETECTED: market='{cm}' date='{cd}' oi='{co}'")
     
     if cm:
         names = sorted(set(r.get(cm, '') for r in rows))
         print(f"\nMARKET NAMES ({len(names)}):")
         for n in names:
-            flag = ""
-            nu = n.upper()
-            for key, pats in CONTRACT_SEARCH.items():
-                for p in pats:
-                    if p in nu:
-                        excl = CONTRACT_EXCLUDE.get(key, [])
-                        if not any(e in nu for e in excl):
-                            flag = f" ✅ [{key}]"
-                        else:
-                            flag = f" ❌ [{key} excluded]"
-            print(f"  {n}{flag}")
+            key = match_contract(n)
+            if key:
+                print(f"  {n} \u2705 [{key}]")
+            else:
+                print(f"  {n}")
+    
+    # Summary
+    print(f"\n{'='*60}")
+    print("MATCH SUMMARY:")
+    matched_keys = set()
+    for n in sorted(set(r.get(cm, '') for r in rows)):
+        key = match_contract(n)
+        if key:
+            matched_keys.add(key)
+            count = sum(1 for r in rows if r.get(cm,'').strip() == n.strip())
+            print(f"  \u2705 {key:8s} -> {n} ({count} rows)")
+    
+    for k in ALL_KEYS:
+        if k not in matched_keys:
+            print(f"  \u274c {k:8s} -> NOT FOUND")
 
 
 def parse_cftc_rows(all_rows):
     if not all_rows:
-        return {k: [] for k in CONTRACT_SEARCH}
+        return {k: [] for k in ALL_KEYS}
     
     sample = list(all_rows[0].keys())
     cm = find_column(sample, COL_MARKET)
@@ -171,63 +172,48 @@ def parse_cftc_rows(all_rows):
     ccl = find_column(sample, COL_CL)
     ccs = find_column(sample, COL_CS)
     
-    print(f"  Columns: market='{cm}' date='{cd1 or cd2}' oi='{co}' nl='{cnl}' cl='{ccl}'")
-    
     if not cm:
-        print(f"  ERROR: Cannot find market column! Available: {sample[:5]}")
-        return {k: [] for k in CONTRACT_SEARCH}
+        print(f"  ERROR: No market column found")
+        return {k: [] for k in ALL_KEYS}
     
-    results = {k: [] for k in CONTRACT_SEARCH}
+    results = {k: [] for k in ALL_KEYS}
     
     for row in all_rows:
-        mname = row.get(cm, '').upper().strip()
+        mname = row.get(cm, '').strip()
+        key = match_contract(mname)
+        if not key:
+            continue
         
-        for key, patterns in CONTRACT_SEARCH.items():
-            matched = False
-            for pat in patterns:
-                if pat in mname:
-                    excl = CONTRACT_EXCLUDE.get(key, [])
-                    if any(e in mname for e in excl):
-                        continue
-                    matched = True
-                    break
-            
-            if not matched:
-                continue
-            
-            # Parse date
-            ds = ""
-            if cd1:
-                ds = row.get(cd1, '').strip()
-            if not ds and cd2:
-                raw = row.get(cd2, '').strip()
-                if len(raw) == 6:
-                    yy = int(raw[:2])
-                    yr = 2000 + yy if yy < 80 else 1900 + yy
-                    ds = f"{yr}-{raw[2:4]}-{raw[4:6]}"
-            if not ds:
-                continue
-            
-            try:
-                def safe_int(v):
-                    v = str(v).strip().replace(',', '')
-                    return int(v) if v else 0
-                
-                results[key].append({
-                    "date": ds,
-                    "open_interest": safe_int(row.get(co, 0)),
-                    "noncommercial_long": safe_int(row.get(cnl, 0)),
-                    "noncommercial_short": safe_int(row.get(cns, 0)),
-                    "commercial_long": safe_int(row.get(ccl, 0)),
-                    "commercial_short": safe_int(row.get(ccs, 0)),
-                })
-            except Exception:
-                continue
-            break
+        ds = ""
+        if cd1:
+            ds = row.get(cd1, '').strip()
+        if not ds and cd2:
+            raw = row.get(cd2, '').strip()
+            if len(raw) == 6:
+                yy = int(raw[:2])
+                yr = 2000 + yy if yy < 80 else 1900 + yy
+                ds = f"{yr}-{raw[2:4]}-{raw[4:6]}"
+        if not ds:
+            continue
+        
+        def safe_int(v):
+            v = str(v).strip().replace(',','')
+            return int(float(v)) if v else 0
+        
+        try:
+            results[key].append({
+                "date": ds,
+                "open_interest": safe_int(row.get(co, 0)),
+                "noncommercial_long": safe_int(row.get(cnl, 0)),
+                "noncommercial_short": safe_int(row.get(cns, 0)),
+                "commercial_long": safe_int(row.get(ccl, 0)),
+                "commercial_short": safe_int(row.get(ccs, 0)),
+            })
+        except Exception:
+            continue
     
-    for key in results:
+    for key in ALL_KEYS:
         results[key].sort(key=lambda x: x['date'])
-        # Remove duplicates
         seen = set()
         unique = []
         for r in results[key]:
@@ -235,7 +221,8 @@ def parse_cftc_rows(all_rows):
                 seen.add(r['date'])
                 unique.append(r)
         results[key] = unique
-        print(f"  {key}: {len(unique)} records")
+        status = f"{len(unique)} records" if unique else "NO DATA"
+        print(f"  {key:8s}: {status}")
     
     return results
 
@@ -246,7 +233,7 @@ def download_all_cot(start_year=2015):
     for year in range(start_year, current_year + 1):
         rows, _ = download_cftc_year(year)
         all_rows.extend(rows)
-    print(f"\n  Total rows: {len(all_rows)}")
+    print(f"  Total rows: {len(all_rows)}")
     return parse_cftc_rows(all_rows)
 
 
@@ -258,41 +245,41 @@ def download_latest_cot():
 def fetch_prices(start_date="2015-01-01"):
     prices = {}
     for key, ticker in PRICE_TICKERS.items():
-        print(f"  Fetching {key} ({ticker})...")
+        print(f"  {key} ({ticker})...", end=" ", flush=True)
         try:
             df = yf.download(ticker, start=start_date, interval="1wk", progress=False)
             if hasattr(df.columns, 'nlevels') and df.columns.nlevels > 1:
                 df.columns = df.columns.get_level_values(0)
             if len(df) > 0:
-                price_data = []
-                close_col = df['Close']
+                pdata = []
+                cc = df['Close']
                 for idx in df.index:
                     ds = idx.strftime("%Y-%m-%d") if hasattr(idx, 'strftime') else str(idx)[:10]
-                    val = close_col.loc[idx]
+                    val = cc.loc[idx]
                     if hasattr(val, 'iloc'):
                         val = val.iloc[0]
-                    price_data.append({"date": ds, "price": round(float(val), 2)})
-                prices[key] = price_data
-                print(f"    {key}: {len(price_data)} prices")
+                    pdata.append({"date": ds, "price": round(float(val), 2)})
+                prices[key] = pdata
+                print(f"{len(pdata)} prices")
             else:
                 prices[key] = []
+                print("no data")
         except Exception as e:
-            print(f"    {key}: Error - {e}")
+            print(f"error: {e}")
             prices[key] = []
     return prices
 
 
 def merge_price_csv(prices, key, csv_path):
     if not os.path.exists(csv_path):
-        print(f"  CSV not found: {csv_path}")
         return prices
-    csv_p = {}
+    cp = {}
     with open(csv_path, 'r') as f:
         for row in csv.DictReader(f):
-            csv_p[row['Date'].strip()] = round(float(row['Close']), 2)
+            cp[row['Date'].strip()] = round(float(row['Close']), 2)
     existing = {p['date'] for p in prices.get(key, [])}
     merged = list(prices.get(key, []))
-    for d, p in csv_p.items():
+    for d, p in cp.items():
         if d not in existing:
             merged.append({"date": d, "price": p})
     merged.sort(key=lambda x: x['date'])
@@ -312,31 +299,28 @@ def calculate_signals(cot_data):
         ws = max(0, i - Z_WINDOW + 1)
         
         nets = [cot_data[j]["commercial_long"] - cot_data[j]["commercial_short"] for j in range(ws, i+1)]
+        z = 0
         if len(nets) >= 20:
             mn = sum(nets)/len(nets)
             sn = (sum((x-mn)**2 for x in nets)/len(nets))**0.5
             z = round((cn-mn)/sn, 2) if sn > 0 else 0
-        else:
-            z = 0
         
         pcts = []
         for j in range(ws, i+1):
             oj = cot_data[j]["open_interest"]
             if oj > 0:
                 pcts.append(cot_data[j]["noncommercial_long"]/oj*100)
+        pctile = 50
         if len(pcts) >= 20:
             rk = sum(1 for x in pcts if x <= nlp)
             pctile = round(rk/len(pcts)*100, 1)
-        else:
-            pctile = 50
         
         sps = [(cot_data[j]["commercial_long"]-cot_data[j]["commercial_short"])-(cot_data[j]["noncommercial_long"]-cot_data[j]["noncommercial_short"]) for j in range(ws, i+1)]
+        sz = 0
         if len(sps) >= 20:
             ms = sum(sps)/len(sps)
             ss = (sum((x-ms)**2 for x in sps)/len(sps))**0.5
             sz = round((sp-ms)/ss, 2) if ss > 0 else 0
-        else:
-            sz = 0
         
         results.append({
             "date": row["date"], "commercial_net": cn, "noncommercial_net": nn,
@@ -368,14 +352,14 @@ def build_signal_history(pl, signals):
 
 def build_dashboard_data(cot_all, prices_all):
     result = {}
-    for key in CONTRACT_SEARCH:
+    for key in ALL_KEYS:
         cot = cot_all.get(key, [])
-        pd = prices_all.get(key, [])
+        pd_list = prices_all.get(key, [])
         if not cot:
             print(f"  {key}: No COT data, skipping")
             continue
         
-        pm = {p["date"]: p["price"] for p in pd}
+        pm = {p["date"]: p["price"] for p in pd_list}
         pds = sorted(pm.keys())
         
         ap = []
@@ -418,7 +402,7 @@ def build_dashboard_data(cot_all, prices_all):
         
         result[key] = {
             "name": ASSET_NAMES[key], "ticker": PRICE_TICKERS[key],
-            "cot_code": CONTRACT_SEARCH[key][0], "data": wd, "signal_history": sh,
+            "cot_code": key, "data": wd, "signal_history": sh,
         }
         lt = wd[-1] if wd else {}
         print(f"  {key}: {len(wd)} weeks, z={lt.get('z_score','-')}, pct={lt.get('percentile','-')}")
@@ -456,9 +440,8 @@ def main():
                 existing = json.load(f)
             latest = download_latest_cot()
             cot_all = {}
-            for key in CONTRACT_SEARCH:
-                ec = []
-                ed = set()
+            for key in ALL_KEYS:
+                ec, ed = [], set()
                 if key in existing:
                     for r in existing[key].get("data", []):
                         ed.add(r["date"])
@@ -470,18 +453,19 @@ def main():
                         nc += 1
                 ec.sort(key=lambda x: x["date"])
                 cot_all[key] = ec
-                if nc: print(f"  {key}: +{nc} new")
+                if nc:
+                    print(f"  {key}: +{nc} new")
         else:
             print("No existing data. Running --initial...")
             cot_all = download_all_cot()
     
     total = sum(len(v) for v in cot_all.values())
     if total == 0:
-        print("\n⚠️  No COT data matched! Run --debug to inspect:")
+        print("\n*** No COT data matched! Run --debug to check names:")
         print("  python fetch_cot_real.py --debug")
         sys.exit(1)
     
-    print("\n=== Fetching prices ===")
+    print(f"\n=== Fetching prices ===")
     start = f"{args.start_year}-01-01" if args.initial else f"{datetime.now().year}-01-01"
     prices = fetch_prices(start)
     if args.btc_csv:
@@ -489,14 +473,15 @@ def main():
     if args.eth_csv:
         prices = merge_price_csv(prices, "ETH", args.eth_csv)
     
-    print("\n=== Building dashboard ===")
+    print(f"\n=== Building dashboard ===")
     data = build_dashboard_data(cot_all, prices)
     
     with open(out, 'w') as f:
         json.dump(data, f)
     
     mb = os.path.getsize(out)/1024/1024
-    print(f"\n✅ Saved: {out} ({mb:.1f} MB)")
+    print(f"\n\u2705 Saved: {out} ({mb:.1f} MB)")
+    print(f"Assets: {list(data.keys())}")
 
 if __name__ == "__main__":
     main()
