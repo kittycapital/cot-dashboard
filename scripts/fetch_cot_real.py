@@ -247,7 +247,7 @@ def fetch_prices(start_date="2015-01-01"):
     for key, ticker in PRICE_TICKERS.items():
         print(f"  {key} ({ticker})...", end=" ", flush=True)
         try:
-            df = yf.download(ticker, start=start_date, interval="1wk", progress=False)
+            df = yf.download(ticker, start=start_date, interval="1d", progress=False)
             if hasattr(df.columns, 'nlevels') and df.columns.nlevels > 1:
                 df.columns = df.columns.get_level_values(0)
             if len(df) > 0:
@@ -363,21 +363,29 @@ def build_dashboard_data(cot_all, prices_all):
         pds = sorted(pm.keys())
         
         ap = []
+        from bisect import bisect_left
         for c in cot:
             cd = c["date"]
             if cd in pm:
                 ap.append(pm[cd])
             else:
-                best, bd = 0, 999
-                try:
-                    cdt = datetime.strptime(cd, "%Y-%m-%d")
-                    for p in pds:
-                        d = abs((datetime.strptime(p, "%Y-%m-%d") - cdt).days)
-                        if d < bd:
-                            bd = d
-                            best = pm[p]
-                except:
-                    pass
+                # Binary search for nearest date
+                idx = bisect_left(pds, cd)
+                best = 0
+                candidates = []
+                if idx > 0:
+                    candidates.append(pds[idx-1])
+                if idx < len(pds):
+                    candidates.append(pds[idx])
+                best_diff = 999
+                for cand in candidates:
+                    try:
+                        diff = abs((datetime.strptime(cand, "%Y-%m-%d") - datetime.strptime(cd, "%Y-%m-%d")).days)
+                        if diff < best_diff and diff <= 7:
+                            best_diff = diff
+                            best = pm[cand]
+                    except:
+                        pass
                 ap.append(best)
         
         for i in range(len(ap)):
