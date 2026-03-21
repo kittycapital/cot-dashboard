@@ -6,187 +6,114 @@
 <title>COT Signal Dashboard</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/chartjs-plugin-annotation/3.0.1/chartjs-plugin-annotation.min.js"></script>
-<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700;900&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
 :root {
-  --bg-primary: #0a0e17;
-  --bg-secondary: #111827;
-  --bg-card: #151d2e;
-  --bg-hover: #1c2740;
-  --border: #1e293b;
-  --border-active: #3b82f6;
+  --bg: #0a0a0a;
+  --bg-card: #111111;
+  --bg-hover: #1a1a1a;
+  --border: #222;
+  --title-blue: #4a90e2;
+  --line-navy: #7ab0f0;
+  --line-teal: #00d4aa;
+  --fill-positive: rgba(100, 170, 220, 0.35);
+  --fill-negative: rgba(230, 150, 90, 0.40);
+  --marker-orange: #e8881f;
+  --zero-line: #5080b0;
+  --grid-color: rgba(255,255,255,0.06);
+  --tick-color: #888;
+  --brand-orange: #e07020;
   --text-primary: #e2e8f0;
   --text-secondary: #94a3b8;
   --text-muted: #64748b;
-  --green: #22c55e;
-  --green-dim: #166534;
-  --green-bg: rgba(34,197,94,0.08);
-  --red: #ef4444;
-  --red-dim: #991b1b;
-  --red-bg: rgba(239,68,68,0.08);
-  --blue: #3b82f6;
-  --yellow: #eab308;
-  --cyan: #06b6d4;
-  --purple: #a855f7;
-  --orange: #f97316;
 }
 
 * { margin: 0; padding: 0; box-sizing: border-box; }
 
 body {
-  background: var(--bg-primary);
+  background: var(--bg);
+  font-family: 'Noto Sans KR', -apple-system, sans-serif;
   color: var(--text-primary);
-  font-family: 'DM Sans', sans-serif;
-  min-height: 100vh;
   overflow-x: hidden;
 }
 
-.mono { font-family: 'JetBrains Mono', monospace; }
+.dashboard {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 10px 20px 20px;
+}
 
 /* ===== HEADER ===== */
 .header {
-  padding: 20px 24px 0;
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
+  padding: 10px 0 0;
 }
 
 .header-left h1 {
-  font-size: 20px;
+  font-size: 18px;
   font-weight: 700;
+  color: var(--title-blue);
   letter-spacing: -0.5px;
-  color: var(--text-primary);
 }
 
-.header-left h1 span { color: var(--blue); }
-
 .header-left p {
-  font-size: 12px;
+  font-size: 11px;
   color: var(--text-muted);
   margin-top: 2px;
 }
 
 .last-update {
-  font-size: 11px;
-  color: var(--text-muted);
-  font-family: 'JetBrains Mono', monospace;
-  text-align: right;
-}
-
-/* ===== SIGNAL SUMMARY TABLE ===== */
-.summary-section { padding: 16px 24px; }
-
-.summary-label {
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--text-muted);
-  text-transform: uppercase;
-  letter-spacing: 1px;
-  margin-bottom: 8px;
-}
-
-.summary-table {
-  width: 100%;
-  border-collapse: separate;
-  border-spacing: 0;
-  border-radius: 8px;
-  overflow: hidden;
-  border: 1px solid var(--border);
-  font-size: 12px;
-}
-
-.summary-table th {
-  background: var(--bg-secondary);
-  color: var(--text-muted);
-  font-weight: 600;
   font-size: 10px;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  padding: 8px 12px;
-  text-align: right;
-  border-bottom: 1px solid var(--border);
-}
-
-.summary-table th:first-child { text-align: left; }
-
-.summary-table td {
-  padding: 7px 12px;
-  text-align: right;
-  border-bottom: 1px solid var(--border);
+  color: var(--text-muted);
   font-family: 'JetBrains Mono', monospace;
-  font-size: 11px;
-  cursor: pointer;
-  transition: background 0.15s;
+  text-align: right;
 }
-
-.summary-table td:first-child {
-  text-align: left;
-  font-family: 'DM Sans', sans-serif;
-  font-weight: 600;
-  color: var(--text-primary);
-}
-
-.summary-table tr:hover td { background: var(--bg-hover); }
-.summary-table tr.active td { background: rgba(59,130,246,0.1); }
-.summary-table tr:last-child td { border-bottom: none; }
-
-.val-bullish { color: var(--green); }
-.val-bearish { color: var(--red); }
-.val-neutral { color: var(--text-muted); }
-
-.signal-dot {
-  display: inline-block;
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  margin-right: 4px;
-  vertical-align: middle;
-}
-
-.signal-dot.bullish { background: var(--green); box-shadow: 0 0 6px rgba(34,197,94,0.5); }
-.signal-dot.bearish { background: var(--red); box-shadow: 0 0 6px rgba(239,68,68,0.5); }
 
 /* ===== TABS ===== */
 .tabs-row {
   display: flex;
   gap: 4px;
-  padding: 0 24px;
+  margin: 12px 0 6px;
   flex-wrap: wrap;
 }
 
 .tab-btn {
-  background: var(--bg-secondary);
-  border: 1px solid var(--border);
-  color: var(--text-muted);
-  padding: 6px 14px;
+  background: #1a1a1a;
+  border: 1px solid #333;
+  color: #888;
+  padding: 5px 14px;
   font-size: 12px;
-  font-weight: 500;
-  border-radius: 6px;
+  font-weight: 600;
+  border-radius: 5px;
   cursor: pointer;
   transition: all 0.15s;
-  font-family: 'DM Sans', sans-serif;
+  font-family: 'Noto Sans KR', sans-serif;
 }
 
-.tab-btn:hover { color: var(--text-primary); border-color: var(--text-muted); }
-.tab-btn.active { background: var(--blue); border-color: var(--blue); color: #fff; }
-
-.asset-tabs { margin-bottom: 12px; }
-.signal-tabs { margin-bottom: 0; }
+.tab-btn:hover { color: #ccc; border-color: #555; }
+.tab-btn.active {
+  background: var(--title-blue);
+  border-color: var(--title-blue);
+  color: #fff;
+}
 
 /* ===== PERIOD SELECTOR ===== */
 .controls-row {
   display: flex;
-  justify-content: space-between;
+  justify-content: flex-end;
   align-items: center;
-  padding: 12px 24px 8px;
+  padding: 4px 0;
+  gap: 8px;
 }
 
 .period-btns { display: flex; gap: 3px; }
 
 .period-btn {
   background: transparent;
-  border: 1px solid var(--border);
-  color: var(--text-muted);
+  border: 1px solid #333;
+  color: #666;
   padding: 3px 10px;
   font-size: 11px;
   font-weight: 500;
@@ -196,52 +123,128 @@ body {
   font-family: 'JetBrains Mono', monospace;
 }
 
-.period-btn:hover { color: var(--text-primary); }
-.period-btn.active { background: var(--bg-hover); border-color: var(--text-muted); color: var(--text-primary); }
-
-.chart-title {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text-secondary);
+.period-btn:hover { color: #ccc; }
+.period-btn.active {
+  background: #222;
+  border-color: #555;
+  color: #e0e0e0;
 }
 
-/* ===== CHARTS ===== */
-.chart-section { padding: 0 24px; }
-
-.chart-container {
-  background: var(--bg-card);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 16px;
-  margin-bottom: 12px;
+/* ===== CHART PANELS ===== */
+.chart-panel {
   position: relative;
+  margin-bottom: 2px;
 }
 
-.chart-container canvas { width: 100% !important; }
+.chart-panel canvas {
+  width: 100% !important;
+}
 
-/* ===== SIGNAL HISTORY ===== */
-.history-section { padding: 16px 24px 24px; }
+.panel-title {
+  font-size: 22px;
+  font-weight: 900;
+  color: var(--title-blue);
+  padding: 8px 0 0 60px;
+  letter-spacing: -0.5px;
+}
 
-.history-table {
+/* ===== SIGNAL SUMMARY TABLE ===== */
+.summary-section {
+  margin: 16px 0 8px;
+}
+
+.summary-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin-bottom: 6px;
+}
+
+.summary-table {
   width: 100%;
   border-collapse: separate;
   border-spacing: 0;
-  border-radius: 8px;
+  border-radius: 6px;
   overflow: hidden;
-  border: 1px solid var(--border);
-  font-size: 11px;
+  border: 1px solid #222;
+  font-size: 12px;
 }
 
-.history-table th {
-  background: var(--bg-secondary);
+.summary-table th {
+  background: #111;
   color: var(--text-muted);
   font-weight: 600;
   font-size: 10px;
   text-transform: uppercase;
   letter-spacing: 0.5px;
-  padding: 8px 10px;
+  padding: 7px 10px;
   text-align: right;
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid #222;
+}
+
+.summary-table th:first-child { text-align: left; }
+
+.summary-table td {
+  padding: 6px 10px;
+  text-align: right;
+  border-bottom: 1px solid #1a1a1a;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.summary-table td:first-child {
+  text-align: left;
+  font-family: 'Noto Sans KR', sans-serif;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.summary-table tr:hover td { background: #1a1a1a; }
+.summary-table tr.active td { background: rgba(74,144,226,0.1); }
+.summary-table tr:last-child td { border-bottom: none; }
+
+.val-bullish { color: #22c55e; }
+.val-bearish { color: #ef4444; }
+.val-neutral { color: #555; }
+
+.signal-dot {
+  display: inline-block;
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  margin-right: 3px;
+  vertical-align: middle;
+}
+
+.signal-dot.bullish { background: #22c55e; }
+.signal-dot.bearish { background: #ef4444; }
+
+/* ===== SIGNAL HISTORY ===== */
+.history-section { margin-top: 16px; }
+
+.history-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  border-radius: 6px;
+  overflow: hidden;
+  border: 1px solid #222;
+  font-size: 11px;
+}
+
+.history-table th {
+  background: #111;
+  color: var(--text-muted);
+  font-weight: 600;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 7px 10px;
+  text-align: right;
+  border-bottom: 1px solid #222;
   position: sticky;
   top: 0;
 }
@@ -251,27 +254,27 @@ body {
 .history-table th:nth-child(3) { text-align: left; }
 
 .history-table td {
-  padding: 6px 10px;
+  padding: 5px 10px;
   text-align: right;
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid #1a1a1a;
   font-family: 'JetBrains Mono', monospace;
   font-size: 11px;
 }
 
 .history-table td:first-child,
-.history-table td:nth-child(2) { text-align: left; font-family: 'DM Sans', sans-serif; }
+.history-table td:nth-child(2) { text-align: left; font-family: 'Noto Sans KR', sans-serif; }
 .history-table td:nth-child(3) { text-align: left; }
 
 .history-scroll {
-  max-height: 320px;
+  max-height: 300px;
   overflow-y: auto;
-  border-radius: 8px;
-  border: 1px solid var(--border);
+  border-radius: 6px;
+  border: 1px solid #222;
 }
 
 .history-scroll::-webkit-scrollbar { width: 4px; }
-.history-scroll::-webkit-scrollbar-track { background: var(--bg-secondary); }
-.history-scroll::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+.history-scroll::-webkit-scrollbar-track { background: #111; }
+.history-scroll::-webkit-scrollbar-thumb { background: #333; border-radius: 2px; }
 
 .badge {
   display: inline-block;
@@ -282,19 +285,25 @@ body {
   font-family: 'JetBrains Mono', monospace;
 }
 
-.badge-bullish { background: var(--green-bg); color: var(--green); border: 1px solid var(--green-dim); }
-.badge-bearish { background: var(--red-bg); color: var(--red); border: 1px solid var(--red-dim); }
+.badge-bullish { background: rgba(34,197,94,0.1); color: #22c55e; border: 1px solid rgba(34,197,94,0.3); }
+.badge-bearish { background: rgba(239,68,68,0.1); color: #ef4444; border: 1px solid rgba(239,68,68,0.3); }
 
-.return-positive { color: var(--green); }
-.return-negative { color: var(--red); }
+.return-positive { color: #22c55e; }
+.return-negative { color: #ef4444; }
 
-/* ===== RESPONSIVE ===== */
-@media (max-width: 768px) {
-  .summary-table { font-size: 10px; }
-  .summary-table th, .summary-table td { padding: 5px 6px; }
-  .tabs-row { gap: 3px; }
-  .tab-btn { padding: 5px 10px; font-size: 11px; }
-  .chart-container { padding: 10px; }
+/* ===== BRANDING ===== */
+.brand {
+  text-align: right;
+  font-size: 13px;
+  font-weight: 700;
+  font-style: italic;
+  color: var(--brand-orange);
+  padding: 4px 10px 0;
+}
+
+/* ===== SIGNAL TABS ===== */
+.signal-tabs {
+  margin: 8px 0 4px;
 }
 
 /* ===== LOADING ===== */
@@ -308,104 +317,118 @@ body {
 }
 
 .loading .spinner {
-  width: 20px;
-  height: 20px;
-  border: 2px solid var(--border);
-  border-top-color: var(--blue);
+  width: 20px; height: 20px;
+  border: 2px solid #222;
+  border-top-color: var(--title-blue);
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
   margin-right: 10px;
 }
 
 @keyframes spin { to { transform: rotate(360deg); } }
+
+/* ===== RESPONSIVE ===== */
+@media (max-width: 768px) {
+  .panel-title { font-size: 16px; padding-left: 40px; }
+  .summary-table { font-size: 10px; }
+  .summary-table th, .summary-table td { padding: 4px 5px; }
+  .dashboard { padding: 8px 10px; }
+}
 </style>
 </head>
 <body>
 
-<div class="header">
-  <div class="header-left">
-    <h1><span>COT</span> Signal Dashboard</h1>
-    <p>Commitments of Traders — Contrarian Positioning Analysis</p>
+<div class="dashboard">
+  <!-- HEADER -->
+  <div class="header">
+    <div class="header-left">
+      <h1>COT Signal Dashboard</h1>
+      <p>Commitments of Traders — Contrarian Positioning Analysis</p>
+    </div>
+    <div class="last-update" id="lastUpdate">Loading...</div>
   </div>
-  <div class="last-update mono" id="lastUpdate">Loading...</div>
-</div>
 
-<!-- SIGNAL SUMMARY TABLE -->
-<div class="summary-section">
-  <div class="summary-label">Signal Overview — All Assets</div>
-  <div style="overflow-x:auto;">
-    <table class="summary-table" id="summaryTable">
-      <thead>
-        <tr>
-          <th>Asset</th>
-          <th>Price</th>
-          <th>Z-Score</th>
-          <th>Signal</th>
-          <th>%ile</th>
-          <th>Signal</th>
-          <th>Spread Z</th>
-          <th>Signal</th>
-        </tr>
-      </thead>
-      <tbody id="summaryBody"></tbody>
-    </table>
+  <!-- SIGNAL SUMMARY TABLE -->
+  <div class="summary-section">
+    <div class="summary-label">Signal Overview — All Assets</div>
+    <div style="overflow-x:auto;">
+      <table class="summary-table" id="summaryTable">
+        <thead>
+          <tr>
+            <th>Asset</th>
+            <th>Price</th>
+            <th>Z-Score</th>
+            <th>Signal</th>
+            <th>%ile</th>
+            <th>Signal</th>
+            <th>Spread Z</th>
+            <th>Signal</th>
+          </tr>
+        </thead>
+        <tbody id="summaryBody"></tbody>
+      </table>
+    </div>
   </div>
-</div>
 
-<!-- ASSET TABS -->
-<div class="tabs-row asset-tabs" id="assetTabs"></div>
+  <!-- ASSET TABS -->
+  <div class="tabs-row" id="assetTabs"></div>
 
-<!-- CONTROLS ROW -->
-<div class="controls-row">
-  <div class="chart-title" id="chartTitle">Bitcoin — Price & COT</div>
-  <div class="period-btns">
-    <button class="period-btn" data-period="52" onclick="setPeriod(52)">1Y</button>
-    <button class="period-btn active" data-period="156" onclick="setPeriod(156)">3Y</button>
-    <button class="period-btn" data-period="260" onclick="setPeriod(260)">5Y</button>
-    <button class="period-btn" data-period="9999" onclick="setPeriod(9999)">ALL</button>
+  <!-- CONTROLS ROW -->
+  <div class="controls-row">
+    <div class="period-btns">
+      <button class="period-btn" data-period="52" onclick="setPeriod(52)">1Y</button>
+      <button class="period-btn active" data-period="156" onclick="setPeriod(156)">3Y</button>
+      <button class="period-btn" data-period="260" onclick="setPeriod(260)">5Y</button>
+      <button class="period-btn" data-period="9999" onclick="setPeriod(9999)">ALL</button>
+    </div>
   </div>
-</div>
 
-<!-- PRICE CHART -->
-<div class="chart-section">
-  <div class="chart-container">
-    <canvas id="priceChart" height="220"></canvas>
+  <!-- SIGNAL TYPE TABS -->
+  <div class="tabs-row signal-tabs" id="signalTabs">
+    <button class="tab-btn active" data-signal="zscore" onclick="setSignalType('zscore')">Z-Score</button>
+    <button class="tab-btn" data-signal="pctoi" onclick="setSignalType('pctoi')">% Open Interest</button>
+    <button class="tab-btn" data-signal="spread" onclick="setSignalType('spread')">Comm vs NonComm Spread</button>
   </div>
-</div>
 
-<!-- SIGNAL TYPE TABS -->
-<div class="tabs-row signal-tabs" id="signalTabs">
-  <button class="tab-btn active" data-signal="zscore" onclick="setSignalType('zscore')">Z-Score</button>
-  <button class="tab-btn" data-signal="pctoi" onclick="setSignalType('pctoi')">% Open Interest</button>
-  <button class="tab-btn" data-signal="spread" onclick="setSignalType('spread')">Comm vs NonComm Spread</button>
-</div>
-
-<!-- SIGNAL CHART -->
-<div class="chart-section" style="margin-top:12px;">
-  <div class="chart-container">
-    <canvas id="signalChart" height="180"></canvas>
+  <!-- PANEL 1: PRICE -->
+  <div class="chart-panel">
+    <div class="panel-title" id="pricePanelTitle">Bitcoin</div>
+    <canvas id="priceChart" height="160"></canvas>
   </div>
-</div>
 
-<!-- SIGNAL HISTORY -->
-<div class="history-section">
-  <div class="summary-label">Signal History — <span id="historyAssetName">Bitcoin</span></div>
-  <div class="history-scroll">
-    <table class="history-table">
-      <thead>
-        <tr>
-          <th>Date</th>
-          <th>Type</th>
-          <th>Direction</th>
-          <th>Price</th>
-          <th>4W Return</th>
-          <th>8W Return</th>
-          <th>13W Return</th>
-          <th>26W Return</th>
-        </tr>
-      </thead>
-      <tbody id="historyBody"></tbody>
-    </table>
+  <!-- PANEL 2: COMMERCIALS' NET POSITION -->
+  <div class="chart-panel">
+    <div class="panel-title" style="font-size:17px;">Commercials' Net Position</div>
+    <canvas id="commChart" height="170"></canvas>
+  </div>
+
+  <!-- PANEL 3: LARGE SPECULATORS' NET POSITION -->
+  <div class="chart-panel">
+    <div class="panel-title" style="font-size:17px;">Large Speculators' Net Position</div>
+    <canvas id="specChart" height="170"></canvas>
+    <div class="brand">HerdVibe</div>
+  </div>
+
+  <!-- SIGNAL HISTORY -->
+  <div class="history-section">
+    <div class="summary-label">Signal History — <span id="historyAssetName">Bitcoin</span></div>
+    <div class="history-scroll">
+      <table class="history-table">
+        <thead>
+          <tr>
+            <th>Date</th>
+            <th>Type</th>
+            <th>Direction</th>
+            <th>Price</th>
+            <th>4W Return</th>
+            <th>8W Return</th>
+            <th>13W Return</th>
+            <th>26W Return</th>
+          </tr>
+        </thead>
+        <tbody id="historyBody"></tbody>
+      </table>
+    </div>
   </div>
 </div>
 
@@ -418,9 +441,40 @@ let currentAsset = 'BTC';
 let currentSignal = 'zscore';
 let currentPeriod = 156;
 let priceChart = null;
-let signalChart = null;
+let commChart = null;
+let specChart = null;
 
 const ASSET_ORDER = ['BTC','ETH','SP500','NASDAQ','RUSSELL','DXY','GOLD','SILVER','COPPER','OIL'];
+
+// ============================================================
+// CHART.JS CUSTOM PLUGIN — Orange circle markers for signals
+// ============================================================
+const circleMarkerPlugin = {
+  id: 'circleMarkers',
+  afterDatasetDraw(chart) {
+    const meta = chart.getDatasetMeta(0);
+    if (!meta || !chart.data._signalIndices) return;
+    const ctx = chart.ctx;
+    const indices = chart.data._signalIndices;
+    
+    indices.forEach(idx => {
+      const point = meta.data[idx];
+      if (!point) return;
+      const x = point.x;
+      const y = point.y;
+      
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(x, y, 10, 0, Math.PI * 2);
+      ctx.strokeStyle = '#e8881f';
+      ctx.lineWidth = 2.5;
+      ctx.stroke();
+      ctx.restore();
+    });
+  }
+};
+
+Chart.register(circleMarkerPlugin);
 
 // ============================================================
 // LOAD DATA
@@ -440,7 +494,6 @@ async function loadData() {
 // INIT
 // ============================================================
 function initDashboard() {
-  // Build asset tabs
   const tabsEl = document.getElementById('assetTabs');
   ASSET_ORDER.forEach(key => {
     const btn = document.createElement('button');
@@ -490,8 +543,6 @@ function buildSummaryTable() {
 function formatPrice(p, key) {
   if (['BTC','SP500','NASDAQ','RUSSELL','GOLD'].includes(key)) return p.toLocaleString('en-US', {minimumFractionDigits: 0, maximumFractionDigits: 0});
   if (['ETH'].includes(key)) return p.toLocaleString('en-US', {minimumFractionDigits: 0, maximumFractionDigits: 0});
-  if (['COPPER'].includes(key)) return p.toFixed(2);
-  if (['OIL','SILVER','DXY'].includes(key)) return p.toFixed(2);
   return p.toFixed(2);
 }
 
@@ -514,6 +565,68 @@ function signalBadge(sig) {
 }
 
 // ============================================================
+// HELPER: get signal indices
+// ============================================================
+function getSignalIndices(data) {
+  const indices = [];
+  data.forEach((row, i) => {
+    const sig = currentSignal === 'zscore' ? row.z_signal :
+                currentSignal === 'pctoi' ? row.pct_signal : row.spread_signal;
+    if (sig === 'bullish' || sig === 'bearish') indices.push(i);
+  });
+  return indices;
+}
+
+// ============================================================
+// HELPER: get data values for commercial / speculator panels
+// ============================================================
+function getCommercialData(data) {
+  // Check if raw net position data exists
+  if (data[0].commercial_net !== undefined) {
+    return data.map(r => r.commercial_net);
+  }
+  // Fallback: use z_score as proxy (scaled for visual effect)
+  return data.map(r => r.z_score);
+}
+
+function getSpeculatorData(data) {
+  // Check if raw net position data exists
+  if (data[0].noncomm_net !== undefined) {
+    return data.map(r => r.noncomm_net);
+  }
+  // Fallback: use spread_z as proxy (inverse of commercial)
+  return data.map(r => r.spread_z);
+}
+
+function getPanelLabel(data, type) {
+  if (type === 'comm' && data[0].commercial_net !== undefined) return 'Contracts';
+  if (type === 'spec' && data[0].noncomm_net !== undefined) return 'Contracts';
+  return type === 'comm' ? 'Z-Score' : 'Spread Z';
+}
+
+// ============================================================
+// SHARED CHART OPTIONS
+// ============================================================
+function makeSharedXAxis(data) {
+  return {
+    grid: { color: 'rgba(255,255,255,0.05)', drawBorder: false },
+    ticks: {
+      color: '#888',
+      font: { family: 'JetBrains Mono', size: 10 },
+      maxTicksLimit: 7,
+      callback: function(val) {
+        const label = this.getLabelForValue(val);
+        if (!label) return '';
+        // Show year labels
+        return label.substring(0, 4);
+      },
+      autoSkip: true,
+    },
+    border: { display: false }
+  };
+}
+
+// ============================================================
 // CHARTS
 // ============================================================
 function updateCharts() {
@@ -521,74 +634,39 @@ function updateCharts() {
   const allData = d.data;
   const sliceStart = Math.max(0, allData.length - currentPeriod);
   const data = allData.slice(sliceStart);
+  const labels = data.map(r => r.date);
+  const signalIndices = getSignalIndices(data);
 
-  document.getElementById('chartTitle').textContent = `${d.name} — Price & COT`;
+  document.getElementById('pricePanelTitle').textContent = d.name;
   document.getElementById('historyAssetName').textContent = d.name;
 
-  // Price Chart
+  // ---- PANEL 1: PRICE ----
   const priceCtx = document.getElementById('priceChart').getContext('2d');
   if (priceChart) priceChart.destroy();
 
-  // Find signal points for markers
-  const bullishPoints = [];
-  const bearishPoints = [];
-  data.forEach((row, i) => {
-    const sig = currentSignal === 'zscore' ? row.z_signal :
-                currentSignal === 'pctoi' ? row.pct_signal : row.spread_signal;
-    if (sig === 'bullish') bullishPoints.push({x: i, y: row.price});
-    if (sig === 'bearish') bearishPoints.push({x: i, y: row.price});
-  });
+  const priceData = {
+    labels: labels,
+    datasets: [{
+      label: 'Price',
+      data: data.map(r => r.price),
+      borderColor: '#7ab0f0',
+      backgroundColor: 'transparent',
+      borderWidth: 1.8,
+      pointRadius: 0,
+      pointHoverRadius: 3,
+      fill: false,
+      tension: 0.05,
+    }],
+    _signalIndices: signalIndices
+  };
 
   priceChart = new Chart(priceCtx, {
     type: 'line',
-    data: {
-      labels: data.map(r => r.date),
-      datasets: [
-        {
-          label: 'Price',
-          data: data.map(r => r.price),
-          borderColor: '#60a5fa',
-          backgroundColor: 'rgba(96,165,250,0.05)',
-          borderWidth: 1.5,
-          pointRadius: 0,
-          fill: true,
-          tension: 0.1,
-          order: 2,
-        },
-        {
-          label: 'Bullish Signal',
-          data: data.map((r, i) => {
-            const sig = currentSignal === 'zscore' ? r.z_signal :
-                        currentSignal === 'pctoi' ? r.pct_signal : r.spread_signal;
-            return sig === 'bullish' ? r.price : null;
-          }),
-          borderColor: 'transparent',
-          backgroundColor: '#22c55e',
-          pointRadius: 5,
-          pointStyle: 'triangle',
-          showLine: false,
-          order: 1,
-        },
-        {
-          label: 'Bearish Signal',
-          data: data.map((r, i) => {
-            const sig = currentSignal === 'zscore' ? r.z_signal :
-                        currentSignal === 'pctoi' ? r.pct_signal : r.spread_signal;
-            return sig === 'bearish' ? r.price : null;
-          }),
-          borderColor: 'transparent',
-          backgroundColor: '#ef4444',
-          pointRadius: 5,
-          pointStyle: 'triangle',
-          pointRotation: 180,
-          showLine: false,
-          order: 1,
-        }
-      ]
-    },
+    data: priceData,
     options: {
       responsive: true,
       maintainAspectRatio: false,
+      layout: { padding: { left: 10, right: 10, top: 5, bottom: 0 } },
       interaction: { mode: 'index', intersect: false },
       plugins: {
         legend: { display: false },
@@ -601,32 +679,21 @@ function updateCharts() {
           titleFont: { family: 'JetBrains Mono', size: 11 },
           bodyFont: { family: 'JetBrains Mono', size: 11 },
           callbacks: {
-            label: ctx => {
-              if (ctx.dataset.label === 'Price') return `Price: ${formatPrice(ctx.raw, currentAsset)}`;
-              if (ctx.raw !== null) return ctx.dataset.label;
-              return null;
-            }
+            label: ctx => `Price: ${formatPrice(ctx.raw, currentAsset)}`
           }
         }
       },
       scales: {
         x: {
-          grid: { color: 'rgba(30,41,59,0.5)' },
-          ticks: {
-            color: '#64748b',
-            font: { family: 'JetBrains Mono', size: 10 },
-            maxTicksLimit: 8,
-            callback: function(val) {
-              const label = this.getLabelForValue(val);
-              return label ? label.substring(0, 7) : '';
-            }
-          }
+          ...makeSharedXAxis(data),
+          ticks: { ...makeSharedXAxis(data).ticks, display: false }
         },
         y: {
-          position: 'right',
-          grid: { color: 'rgba(30,41,59,0.5)' },
+          position: 'left',
+          grid: { color: 'rgba(255,255,255,0.05)', drawBorder: false },
+          border: { display: false },
           ticks: {
-            color: '#64748b',
+            color: '#888',
             font: { family: 'JetBrains Mono', size: 10 },
             callback: v => formatPrice(v, currentAsset)
           }
@@ -635,95 +702,52 @@ function updateCharts() {
     }
   });
 
-  // Signal Chart
-  updateSignalChart(data);
-}
+  // ---- PANEL 2: COMMERCIALS ----
+  const commCtx = document.getElementById('commChart').getContext('2d');
+  if (commChart) commChart.destroy();
 
-function updateSignalChart(data) {
-  const signalCtx = document.getElementById('signalChart').getContext('2d');
-  if (signalChart) signalChart.destroy();
+  const commValues = getCommercialData(data);
 
-  let chartData, thresholdLines, yLabel;
+  const commData = {
+    labels: labels,
+    datasets: [{
+      label: "Commercials' Net",
+      data: commValues,
+      borderColor: '#00d4aa',
+      backgroundColor: 'transparent',
+      borderWidth: 1.5,
+      pointRadius: 0,
+      pointHoverRadius: 3,
+      fill: {
+        target: 'origin',
+        above: 'rgba(100, 170, 220, 0.30)',
+        below: 'rgba(230, 150, 90, 0.35)'
+      },
+      tension: 0.05,
+    }],
+    _signalIndices: signalIndices
+  };
 
-  if (currentSignal === 'zscore') {
-    chartData = data.map(r => r.z_score);
-    yLabel = 'Commercial Net Z-Score';
-    thresholdLines = [
-      { y: 1.8, color: 'rgba(34,197,94,0.4)', label: '+1.8 (Bullish)' },
-      { y: -1.8, color: 'rgba(239,68,68,0.4)', label: '-1.8 (Bearish)' },
-      { y: 0, color: 'rgba(100,116,139,0.3)', label: '' }
-    ];
-  } else if (currentSignal === 'pctoi') {
-    chartData = data.map(r => r.percentile);
-    yLabel = 'Non-Comm Long % OI Percentile';
-    thresholdLines = [
-      { y: 90, color: 'rgba(239,68,68,0.4)', label: '90th (Bearish)' },
-      { y: 10, color: 'rgba(34,197,94,0.4)', label: '10th (Bullish)' },
-      { y: 50, color: 'rgba(100,116,139,0.3)', label: '' }
-    ];
-  } else {
-    chartData = data.map(r => r.spread_z);
-    yLabel = 'Comm-NonComm Spread Z-Score';
-    thresholdLines = [
-      { y: 1.8, color: 'rgba(34,197,94,0.4)', label: '+1.8 (Bullish)' },
-      { y: -1.8, color: 'rgba(239,68,68,0.4)', label: '-1.8 (Bearish)' },
-      { y: 0, color: 'rgba(100,116,139,0.3)', label: '' }
-    ];
-  }
-
-  // Color bars based on value
-  const barColors = chartData.map(v => {
-    if (currentSignal === 'pctoi') {
-      if (v > 90) return 'rgba(239,68,68,0.7)';
-      if (v < 10) return 'rgba(34,197,94,0.7)';
-      return 'rgba(100,116,139,0.3)';
-    }
-    if (v > 1.8) return 'rgba(34,197,94,0.7)';
-    if (v < -1.8) return 'rgba(239,68,68,0.7)';
-    if (v > 0) return 'rgba(34,197,94,0.25)';
-    return 'rgba(239,68,68,0.25)';
-  });
-
-  const annotations = {};
-  thresholdLines.forEach((line, i) => {
-    annotations[`line${i}`] = {
-      type: 'line',
-      yMin: line.y,
-      yMax: line.y,
-      borderColor: line.color,
-      borderWidth: 1,
-      borderDash: [4, 4],
-      label: {
-        display: !!line.label,
-        content: line.label,
-        position: 'start',
-        font: { family: 'JetBrains Mono', size: 9 },
-        color: line.color.replace('0.4', '0.8'),
-        backgroundColor: 'transparent',
-      }
-    };
-  });
-
-  signalChart = new Chart(signalCtx, {
-    type: 'bar',
-    data: {
-      labels: data.map(r => r.date),
-      datasets: [{
-        label: yLabel,
-        data: chartData,
-        backgroundColor: barColors,
-        borderColor: barColors.map(c => c.replace('0.7', '0.9').replace('0.25', '0.4').replace('0.3', '0.5')),
-        borderWidth: 1,
-        borderRadius: 1,
-      }]
-    },
+  commChart = new Chart(commCtx, {
+    type: 'line',
+    data: commData,
     options: {
       responsive: true,
       maintainAspectRatio: false,
+      layout: { padding: { left: 10, right: 10, top: 5, bottom: 0 } },
       interaction: { mode: 'index', intersect: false },
       plugins: {
         legend: { display: false },
-        annotation: { annotations },
+        annotation: {
+          annotations: {
+            zeroLine: {
+              type: 'line',
+              yMin: 0, yMax: 0,
+              borderColor: '#5080b0',
+              borderWidth: 1,
+            }
+          }
+        },
         tooltip: {
           backgroundColor: '#1e293b',
           titleColor: '#e2e8f0',
@@ -732,29 +756,90 @@ function updateSignalChart(data) {
           borderWidth: 1,
           titleFont: { family: 'JetBrains Mono', size: 11 },
           bodyFont: { family: 'JetBrains Mono', size: 11 },
-          callbacks: {
-            label: ctx => `${yLabel}: ${ctx.raw.toFixed(2)}`
-          }
         }
       },
       scales: {
         x: {
-          grid: { color: 'rgba(30,41,59,0.5)' },
+          ...makeSharedXAxis(data),
+          ticks: { ...makeSharedXAxis(data).ticks, display: false }
+        },
+        y: {
+          position: 'left',
+          grid: { color: 'rgba(255,255,255,0.05)', drawBorder: false },
+          border: { display: false },
           ticks: {
-            color: '#64748b',
+            color: '#888',
             font: { family: 'JetBrains Mono', size: 10 },
-            maxTicksLimit: 8,
-            callback: function(val) {
-              const label = this.getLabelForValue(val);
-              return label ? label.substring(0, 7) : '';
+          }
+        }
+      }
+    }
+  });
+
+  // ---- PANEL 3: LARGE SPECULATORS ----
+  const specCtx = document.getElementById('specChart').getContext('2d');
+  if (specChart) specChart.destroy();
+
+  const specValues = getSpeculatorData(data);
+
+  const specData = {
+    labels: labels,
+    datasets: [{
+      label: "Large Speculators' Net",
+      data: specValues,
+      borderColor: '#00d4aa',
+      backgroundColor: 'transparent',
+      borderWidth: 1.5,
+      pointRadius: 0,
+      pointHoverRadius: 3,
+      fill: {
+        target: 'origin',
+        above: 'rgba(100, 170, 220, 0.30)',
+        below: 'rgba(230, 150, 90, 0.35)'
+      },
+      tension: 0.05,
+    }],
+    _signalIndices: signalIndices
+  };
+
+  specChart = new Chart(specCtx, {
+    type: 'line',
+    data: specData,
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      layout: { padding: { left: 10, right: 10, top: 5, bottom: 0 } },
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { display: false },
+        annotation: {
+          annotations: {
+            zeroLine: {
+              type: 'line',
+              yMin: 0, yMax: 0,
+              borderColor: '#5080b0',
+              borderWidth: 1,
             }
           }
         },
+        tooltip: {
+          backgroundColor: '#1e293b',
+          titleColor: '#e2e8f0',
+          bodyColor: '#94a3b8',
+          borderColor: '#334155',
+          borderWidth: 1,
+          titleFont: { family: 'JetBrains Mono', size: 11 },
+          bodyFont: { family: 'JetBrains Mono', size: 11 },
+        }
+      },
+      scales: {
+        x: makeSharedXAxis(data),
         y: {
-          position: 'right',
-          grid: { color: 'rgba(30,41,59,0.5)' },
+          position: 'left',
+          grid: { color: 'rgba(255,255,255,0.05)', drawBorder: false },
+          border: { display: false },
           ticks: {
-            color: '#64748b',
+            color: '#888',
             font: { family: 'JetBrains Mono', size: 10 },
           }
         }
@@ -777,7 +862,7 @@ function updateHistory() {
   tbody.innerHTML = '';
 
   if (history.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:var(--text-muted);padding:20px;">No signals for this configuration</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:#555;padding:20px;">No signals for this configuration</td></tr>';
     return;
   }
 
@@ -786,14 +871,14 @@ function updateHistory() {
     const typeLabel = h.type === 'z_score' ? 'Z-Score' : h.type === 'pct_oi' ? '% OI' : 'Spread';
     
     tr.innerHTML = `
-      <td class="mono">${h.date}</td>
+      <td style="font-family:'JetBrains Mono',monospace">${h.date}</td>
       <td>${typeLabel}</td>
       <td><span class="badge badge-${h.direction}">${h.direction === 'bullish' ? '▲ BUY' : '▼ SELL'}</span></td>
-      <td class="mono">${formatPrice(h.price_at_signal, currentAsset)}</td>
-      <td class="mono ${returnClass(h.returns['4w'], h.direction)}">${formatReturn(h.returns['4w'])}</td>
-      <td class="mono ${returnClass(h.returns['8w'], h.direction)}">${formatReturn(h.returns['8w'])}</td>
-      <td class="mono ${returnClass(h.returns['13w'], h.direction)}">${formatReturn(h.returns['13w'])}</td>
-      <td class="mono ${returnClass(h.returns['26w'], h.direction)}">${formatReturn(h.returns['26w'])}</td>
+      <td style="font-family:'JetBrains Mono',monospace">${formatPrice(h.price_at_signal, currentAsset)}</td>
+      <td class="${returnClass(h.returns['4w'], h.direction)}">${formatReturn(h.returns['4w'])}</td>
+      <td class="${returnClass(h.returns['8w'], h.direction)}">${formatReturn(h.returns['8w'])}</td>
+      <td class="${returnClass(h.returns['13w'], h.direction)}">${formatReturn(h.returns['13w'])}</td>
+      <td class="${returnClass(h.returns['26w'], h.direction)}">${formatReturn(h.returns['26w'])}</td>
     `;
     tbody.appendChild(tr);
   });
@@ -806,7 +891,6 @@ function formatReturn(r) {
 
 function returnClass(r, direction) {
   if (r === null || r === undefined) return '';
-  // For bullish signals, positive return = correct. For bearish, negative = correct.
   if (direction === 'bullish') return r > 0 ? 'return-positive' : 'return-negative';
   return r < 0 ? 'return-positive' : 'return-negative';
 }
@@ -816,11 +900,9 @@ function returnClass(r, direction) {
 // ============================================================
 function setAsset(key) {
   currentAsset = key;
-  // Update tab styles
   document.querySelectorAll('#assetTabs .tab-btn').forEach(btn => {
     btn.classList.toggle('active', btn.getAttribute('data-asset') === key);
   });
-  // Update summary table row highlighting
   document.querySelectorAll('#summaryBody tr').forEach((tr, i) => {
     tr.classList.toggle('active', ASSET_ORDER[i] === key);
   });
