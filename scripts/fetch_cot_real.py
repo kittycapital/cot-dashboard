@@ -247,11 +247,9 @@ def fetch_prices(start_date="2015-01-01"):
     for key, ticker in PRICE_TICKERS.items():
         print(f"  {key} ({ticker})...", end=" ", flush=True)
         try:
-            df = yf.download(ticker, period="max", interval="1d", progress=False)
+            df = yf.download(ticker, start=start_date, interval="1d", progress=False)
             if hasattr(df.columns, 'nlevels') and df.columns.nlevels > 1:
                 df.columns = df.columns.get_level_values(0)
-            if len(df) > 0:
-                df = df[df.index >= start_date]
             if len(df) > 0:
                 pdata = []
                 for idx in df.index:
@@ -487,7 +485,16 @@ def main():
         sys.exit(1)
     
     print(f"\n=== Fetching prices ===")
-    start = f"{args.start_year}-01-01" if args.initial else f"{datetime.now().year}-01-01"
+    # Always fetch from earliest COT date to get full price history
+    earliest_date = "2015-01-01"
+    for key in ALL_KEYS:
+        cot_rows = cot_all.get(key, [])
+        if cot_rows:
+            first_date = cot_rows[0]["date"] if isinstance(cot_rows[0], dict) else "2015-01-01"
+            if first_date < earliest_date:
+                earliest_date = first_date
+    start = earliest_date
+    print(f"  Price start date: {start}")
     
     # Load CSV price data FIRST (primary source for BTC/ETH)
     prices = {k: [] for k in ALL_KEYS}
