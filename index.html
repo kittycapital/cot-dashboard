@@ -140,6 +140,11 @@ body {
   width: 100% !important;
 }
 
+.chart-wrap {
+  position: relative;
+  width: 100%;
+}
+
 .panel-title {
   font-size: 22px;
   font-weight: 900;
@@ -393,19 +398,25 @@ body {
   <!-- PANEL 1: PRICE -->
   <div class="chart-panel">
     <div class="panel-title" id="pricePanelTitle">Bitcoin</div>
-    <canvas id="priceChart" height="160"></canvas>
+    <div class="chart-wrap" style="height:200px;">
+      <canvas id="priceChart"></canvas>
+    </div>
   </div>
 
   <!-- PANEL 2: COMMERCIALS' NET POSITION -->
   <div class="chart-panel">
     <div class="panel-title" style="font-size:17px;">Commercials' Net Position</div>
-    <canvas id="commChart" height="170"></canvas>
+    <div class="chart-wrap" style="height:220px;">
+      <canvas id="commChart"></canvas>
+    </div>
   </div>
 
   <!-- PANEL 3: LARGE SPECULATORS' NET POSITION -->
   <div class="chart-panel">
     <div class="panel-title" style="font-size:17px;">Large Speculators' Net Position</div>
-    <canvas id="specChart" height="170"></canvas>
+    <div class="chart-wrap" style="height:220px;">
+      <canvas id="specChart"></canvas>
+    </div>
     <div class="brand">HerdVibe</div>
   </div>
 
