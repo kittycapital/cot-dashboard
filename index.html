@@ -448,6 +448,7 @@ body {
 // STATE
 // ============================================================
 let DATA = {};
+let PRICES = {};  // Daily price data from prices.json
 let currentAsset = 'BTC';
 let currentSignal = 'zscore';
 let currentPeriod = 156;
@@ -492,8 +493,19 @@ Chart.register(circleMarkerPlugin);
 // ============================================================
 async function loadData() {
   try {
-    const resp = await fetch('data/cot_dashboard_data.json');
-    DATA = await resp.json();
+    const [cotResp, priceResp] = await Promise.all([
+      fetch('data/cot_dashboard_data.json'),
+      fetch('data/prices.json').catch(() => null)
+    ]);
+    DATA = await cotResp.json();
+    
+    if (priceResp && priceResp.ok) {
+      PRICES = await priceResp.json();
+      console.log('Daily prices loaded:', Object.keys(PRICES).map(k => `${k}:${PRICES[k]?.length || 0}`).join(', '));
+    } else {
+      console.log('prices.json not found, using COT weekly prices for price chart');
+    }
+    
     initDashboard();
   } catch (e) {
     console.error('Failed to load data:', e);
@@ -686,40 +698,99 @@ function makeSharedXAxis(data) {
 // ============================================================
 // CHARTS
 // ============================================================
+function getDailyPriceData(asset, weeklyData) {
+  /**
+   * Get daily price data for the price panel.
+   * Uses PRICES (daily) if available, otherwise falls back to weekly COT prices.
+   * Filters to match the same date range as the weekly COT data.
+   */
+  const startDate = weeklyData[0].date;
+  const endDate = weeklyData[weeklyData.length - 1].date;
+
+  if (PRICES[asset] && PRICES[asset].length > 0) {
+    const daily = PRICES[asset].filter(p => p.d >= startDate && p.d <= endDate);
+    if (daily.length > 10) {
+      // Downsample if too many points (>1000) for performance
+      if (daily.length > 1000) {
+        const step = Math.ceil(daily.length / 800);
+        const sampled = daily.filter((_, i) => i % step === 0 || i === daily.length - 1);
+        return { labels: sampled.map(p => p.d), prices: sampled.map(p => p.p), isDaily: true };
+      }
+      return { labels: daily.map(p => p.d), prices: daily.map(p => p.p), isDaily: true };
+    }
+  }
+
+  // Fallback: weekly prices from COT data
+  return { labels: weeklyData.map(r => r.date), prices: weeklyData.map(r => r.price), isDaily: false };
+}
+
+function getSignalDailyIndices(weeklyData, dailyLabels) {
+  /**
+   * Map weekly signal dates to nearest daily chart indices for circle markers.
+   */
+  const indices = [];
+  const dailyDates = new Set();
+  const dailyDateMap = {};
+  dailyLabels.forEach((d, i) => { dailyDateMap[d] = i; });
+
+  weeklyData.forEach(row => {
+    const sig = currentSignal === 'zscore' ? row.z_signal :
+                currentSignal === 'pctoi' ? row.pct_signal : row.spread_signal;
+    if (sig === 'bullish' || sig === 'bearish') {
+      // Find exact or nearest daily index
+      if (dailyDateMap[row.date] !== undefined) {
+        indices.push(dailyDateMap[row.date]);
+      } else {
+        // Find nearest date within ±5 days
+        const target = new Date(row.date).getTime();
+        let bestIdx = -1, bestDist = Infinity;
+        for (let i = 0; i < dailyLabels.length; i++) {
+          const dist = Math.abs(new Date(dailyLabels[i]).getTime() - target);
+          if (dist < bestDist) { bestDist = dist; bestIdx = i; }
+          if (dist > bestDist && bestDist < 5 * 86400000) break; // Early exit
+        }
+        if (bestIdx >= 0 && bestDist < 10 * 86400000) indices.push(bestIdx);
+      }
+    }
+  });
+  return indices;
+}
+
 function updateCharts() {
   const d = DATA[currentAsset];
   const allData = d.data;
   const sliceStart = Math.max(0, allData.length - currentPeriod);
-  const data = allData.slice(sliceStart);
-  const labels = data.map(r => r.date);
-  const signalIndices = getSignalIndices(data);
+  const cotData = allData.slice(sliceStart);   // Weekly COT data
+  const cotLabels = cotData.map(r => r.date);
+  const cotSignalIndices = getSignalIndices(cotData);
 
   document.getElementById('pricePanelTitle').textContent = d.name;
   document.getElementById('historyAssetName').textContent = d.name;
 
-  // ---- PANEL 1: PRICE ----
+  // ---- PANEL 1: PRICE (daily data if available) ----
   const priceCtx = document.getElementById('priceChart').getContext('2d');
   if (priceChart) priceChart.destroy();
 
-  const priceData = {
-    labels: labels,
-    datasets: [{
-      label: 'Price',
-      data: data.map(r => r.price),
-      borderColor: '#7ab0f0',
-      backgroundColor: 'transparent',
-      borderWidth: 1.8,
-      pointRadius: 0,
-      pointHoverRadius: 3,
-      fill: false,
-      tension: 0.05,
-    }],
-    _signalIndices: signalIndices
-  };
+  const { labels: priceLabels, prices: priceValues } = getDailyPriceData(currentAsset, cotData);
+  const priceSignalIndices = getSignalDailyIndices(cotData, priceLabels);
 
   priceChart = new Chart(priceCtx, {
     type: 'line',
-    data: priceData,
+    data: {
+      labels: priceLabels,
+      datasets: [{
+        label: 'Price',
+        data: priceValues,
+        borderColor: '#7ab0f0',
+        backgroundColor: 'transparent',
+        borderWidth: 1.8,
+        pointRadius: 0,
+        pointHoverRadius: 3,
+        fill: false,
+        tension: 0.05,
+      }],
+      _signalIndices: priceSignalIndices
+    },
     options: {
       responsive: true,
       maintainAspectRatio: false,
@@ -742,8 +813,8 @@ function updateCharts() {
       },
       scales: {
         x: {
-          ...makeSharedXAxis(data),
-          ticks: { ...makeSharedXAxis(data).ticks, display: false }
+          ...makeSharedXAxis(cotData),
+          ticks: { ...makeSharedXAxis(cotData).ticks, display: false }
         },
         y: {
           position: 'left',
@@ -759,35 +830,33 @@ function updateCharts() {
     }
   });
 
-  // ---- PANEL 2: COMMERCIALS ----
+  // ---- PANEL 2: COMMERCIALS (weekly COT data) ----
   const commCtx = document.getElementById('commChart').getContext('2d');
   if (commChart) commChart.destroy();
 
-  const commValues = getCommercialData(data);
-
-  const commData = {
-    labels: labels,
-    datasets: [{
-      label: "Commercials' Net",
-      data: commValues,
-      borderColor: '#00d4aa',
-      backgroundColor: 'transparent',
-      borderWidth: 1.5,
-      pointRadius: 0,
-      pointHoverRadius: 3,
-      fill: {
-        target: 'origin',
-        above: 'rgba(100, 170, 220, 0.30)',
-        below: 'rgba(230, 150, 90, 0.35)'
-      },
-      tension: 0.05,
-    }],
-    _signalIndices: signalIndices
-  };
+  const commValues = getCommercialData(cotData);
 
   commChart = new Chart(commCtx, {
     type: 'line',
-    data: commData,
+    data: {
+      labels: cotLabels,
+      datasets: [{
+        label: "Commercials' Net",
+        data: commValues,
+        borderColor: '#00d4aa',
+        backgroundColor: 'transparent',
+        borderWidth: 1.5,
+        pointRadius: 0,
+        pointHoverRadius: 3,
+        fill: {
+          target: 'origin',
+          above: 'rgba(100, 170, 220, 0.30)',
+          below: 'rgba(230, 150, 90, 0.35)'
+        },
+        tension: 0.05,
+      }],
+      _signalIndices: cotSignalIndices
+    },
     options: {
       responsive: true,
       maintainAspectRatio: false,
@@ -798,70 +867,60 @@ function updateCharts() {
         annotation: {
           annotations: {
             zeroLine: {
-              type: 'line',
-              yMin: 0, yMax: 0,
-              borderColor: '#5080b0',
-              borderWidth: 1,
+              type: 'line', yMin: 0, yMax: 0,
+              borderColor: '#5080b0', borderWidth: 1,
             }
           }
         },
         tooltip: {
-          backgroundColor: '#1e293b',
-          titleColor: '#e2e8f0',
-          bodyColor: '#94a3b8',
-          borderColor: '#334155',
-          borderWidth: 1,
+          backgroundColor: '#1e293b', titleColor: '#e2e8f0', bodyColor: '#94a3b8',
+          borderColor: '#334155', borderWidth: 1,
           titleFont: { family: 'JetBrains Mono', size: 11 },
           bodyFont: { family: 'JetBrains Mono', size: 11 },
         }
       },
       scales: {
         x: {
-          ...makeSharedXAxis(data),
-          ticks: { ...makeSharedXAxis(data).ticks, display: false }
+          ...makeSharedXAxis(cotData),
+          ticks: { ...makeSharedXAxis(cotData).ticks, display: false }
         },
         y: {
           position: 'left',
           grid: { color: 'rgba(255,255,255,0.05)', drawBorder: false },
           border: { display: false },
-          ticks: {
-            color: '#888',
-            font: { family: 'JetBrains Mono', size: 10 },
-          }
+          ticks: { color: '#888', font: { family: 'JetBrains Mono', size: 10 } }
         }
       }
     }
   });
 
-  // ---- PANEL 3: LARGE SPECULATORS ----
+  // ---- PANEL 3: LARGE SPECULATORS (weekly COT data) ----
   const specCtx = document.getElementById('specChart').getContext('2d');
   if (specChart) specChart.destroy();
 
-  const specValues = getSpeculatorData(data);
-
-  const specData = {
-    labels: labels,
-    datasets: [{
-      label: "Large Speculators' Net",
-      data: specValues,
-      borderColor: '#00d4aa',
-      backgroundColor: 'transparent',
-      borderWidth: 1.5,
-      pointRadius: 0,
-      pointHoverRadius: 3,
-      fill: {
-        target: 'origin',
-        above: 'rgba(100, 170, 220, 0.30)',
-        below: 'rgba(230, 150, 90, 0.35)'
-      },
-      tension: 0.05,
-    }],
-    _signalIndices: signalIndices
-  };
+  const specValues = getSpeculatorData(cotData);
 
   specChart = new Chart(specCtx, {
     type: 'line',
-    data: specData,
+    data: {
+      labels: cotLabels,
+      datasets: [{
+        label: "Large Speculators' Net",
+        data: specValues,
+        borderColor: '#00d4aa',
+        backgroundColor: 'transparent',
+        borderWidth: 1.5,
+        pointRadius: 0,
+        pointHoverRadius: 3,
+        fill: {
+          target: 'origin',
+          above: 'rgba(100, 170, 220, 0.30)',
+          below: 'rgba(230, 150, 90, 0.35)'
+        },
+        tension: 0.05,
+      }],
+      _signalIndices: cotSignalIndices
+    },
     options: {
       responsive: true,
       maintainAspectRatio: false,
@@ -872,33 +931,25 @@ function updateCharts() {
         annotation: {
           annotations: {
             zeroLine: {
-              type: 'line',
-              yMin: 0, yMax: 0,
-              borderColor: '#5080b0',
-              borderWidth: 1,
+              type: 'line', yMin: 0, yMax: 0,
+              borderColor: '#5080b0', borderWidth: 1,
             }
           }
         },
         tooltip: {
-          backgroundColor: '#1e293b',
-          titleColor: '#e2e8f0',
-          bodyColor: '#94a3b8',
-          borderColor: '#334155',
-          borderWidth: 1,
+          backgroundColor: '#1e293b', titleColor: '#e2e8f0', bodyColor: '#94a3b8',
+          borderColor: '#334155', borderWidth: 1,
           titleFont: { family: 'JetBrains Mono', size: 11 },
           bodyFont: { family: 'JetBrains Mono', size: 11 },
         }
       },
       scales: {
-        x: makeSharedXAxis(data),
+        x: makeSharedXAxis(cotData),
         y: {
           position: 'left',
           grid: { color: 'rgba(255,255,255,0.05)', drawBorder: false },
           border: { display: false },
-          ticks: {
-            color: '#888',
-            font: { family: 'JetBrains Mono', size: 10 },
-          }
+          ticks: { color: '#888', font: { family: 'JetBrains Mono', size: 10 } }
         }
       }
     }
