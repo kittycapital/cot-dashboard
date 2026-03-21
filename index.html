@@ -494,6 +494,13 @@ async function loadData() {
 // INIT
 // ============================================================
 function initDashboard() {
+  // Debug: log available data fields
+  const firstAsset = DATA[ASSET_ORDER[0]];
+  if (firstAsset && firstAsset.data && firstAsset.data[0]) {
+    console.log('Available data fields:', Object.keys(firstAsset.data[0]));
+    console.log('Sample row:', firstAsset.data[0]);
+  }
+
   const tabsEl = document.getElementById('assetTabs');
   ASSET_ORDER.forEach(key => {
     const btn = document.createElement('button');
@@ -579,29 +586,68 @@ function getSignalIndices(data) {
 
 // ============================================================
 // HELPER: get data values for commercial / speculator panels
+// Detect whether raw fields oscillate around zero; if not, use z-scores
 // ============================================================
-function getCommercialData(data) {
-  // Check if raw net position data exists
-  if (data[0].commercial_net !== undefined) {
-    return data.map(r => r.commercial_net);
+function isOscillating(values) {
+  // Check if data has both positive and negative values (oscillates around zero)
+  let hasPos = false, hasNeg = false;
+  for (let i = 0; i < values.length; i++) {
+    if (values[i] > 0) hasPos = true;
+    if (values[i] < 0) hasNeg = true;
+    if (hasPos && hasNeg) return true;
   }
-  // Fallback: use z_score as proxy (scaled for visual effect)
+  return false;
+}
+
+function getCommercialData(data) {
+  // Try raw net fields (various possible naming conventions)
+  const fieldCandidates = ['comm_net', 'commercial_net', 'comm_net_position'];
+  for (const f of fieldCandidates) {
+    if (data[0][f] !== undefined) {
+      const vals = data.map(r => r[f]);
+      console.log(`Commercial field '${f}' found. Oscillating: ${isOscillating(vals)}, sample: [${vals.slice(0,3).join(', ')}]`);
+      if (isOscillating(vals)) return vals;
+    }
+  }
+  // Try computing from long/short
+  if (data[0].comm_long !== undefined && data[0].comm_short !== undefined) {
+    const vals = data.map(r => r.comm_long - r.comm_short);
+    console.log(`Commercial computed from comm_long - comm_short. Oscillating: ${isOscillating(vals)}`);
+    if (isOscillating(vals)) return vals;
+  }
+  if (data[0].commercial_long !== undefined && data[0].commercial_short !== undefined) {
+    const vals = data.map(r => r.commercial_long - r.commercial_short);
+    console.log(`Commercial computed from commercial_long - commercial_short. Oscillating: ${isOscillating(vals)}`);
+    if (isOscillating(vals)) return vals;
+  }
+  // Fallback: z_score always oscillates around zero
+  console.log('Commercial: using z_score fallback');
   return data.map(r => r.z_score);
 }
 
 function getSpeculatorData(data) {
-  // Check if raw net position data exists
-  if (data[0].noncomm_net !== undefined) {
-    return data.map(r => r.noncomm_net);
+  const fieldCandidates = ['noncomm_net', 'spec_net', 'noncommercial_net'];
+  for (const f of fieldCandidates) {
+    if (data[0][f] !== undefined) {
+      const vals = data.map(r => r[f]);
+      console.log(`Speculator field '${f}' found. Oscillating: ${isOscillating(vals)}, sample: [${vals.slice(0,3).join(', ')}]`);
+      if (isOscillating(vals)) return vals;
+    }
   }
-  // Fallback: use spread_z as proxy (inverse of commercial)
+  // Try computing from long/short
+  if (data[0].noncomm_long !== undefined && data[0].noncomm_short !== undefined) {
+    const vals = data.map(r => r.noncomm_long - r.noncomm_short);
+    console.log(`Speculator computed from noncomm_long - noncomm_short. Oscillating: ${isOscillating(vals)}`);
+    if (isOscillating(vals)) return vals;
+  }
+  if (data[0].noncommercial_long !== undefined && data[0].noncommercial_short !== undefined) {
+    const vals = data.map(r => r.noncommercial_long - r.noncommercial_short);
+    console.log(`Speculator computed from noncommercial_long - noncommercial_short. Oscillating: ${isOscillating(vals)}`);
+    if (isOscillating(vals)) return vals;
+  }
+  // Fallback: spread_z oscillates around zero
+  console.log('Speculator: using spread_z fallback');
   return data.map(r => r.spread_z);
-}
-
-function getPanelLabel(data, type) {
-  if (type === 'comm' && data[0].commercial_net !== undefined) return 'Contracts';
-  if (type === 'spec' && data[0].noncomm_net !== undefined) return 'Contracts';
-  return type === 'comm' ? 'Z-Score' : 'Spread Z';
 }
 
 // ============================================================
