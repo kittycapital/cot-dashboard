@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>COT Signal Dashboard</title>
+<title>COT 시그널 대시보드</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/chartjs-plugin-annotation/3.0.1/chartjs-plugin-annotation.min.js"></script>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700;900&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
@@ -45,15 +45,13 @@ body {
 
 /* ===== HEADER ===== */
 .header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
   padding: 10px 0 0;
+  text-align: center;
 }
 
 .header-left h1 {
-  font-size: 18px;
-  font-weight: 700;
+  font-size: 22px;
+  font-weight: 900;
   color: var(--title-blue);
   letter-spacing: -0.5px;
 }
@@ -68,7 +66,7 @@ body {
   font-size: 10px;
   color: var(--text-muted);
   font-family: 'JetBrains Mono', monospace;
-  text-align: right;
+  margin-top: 4px;
 }
 
 /* ===== TABS ===== */
@@ -77,6 +75,7 @@ body {
   gap: 4px;
   margin: 12px 0 6px;
   flex-wrap: wrap;
+  justify-content: center;
 }
 
 .tab-btn {
@@ -102,7 +101,7 @@ body {
 /* ===== PERIOD SELECTOR ===== */
 .controls-row {
   display: flex;
-  justify-content: flex-end;
+  justify-content: center;
   align-items: center;
   padding: 4px 0;
   gap: 8px;
@@ -149,8 +148,9 @@ body {
   font-size: 22px;
   font-weight: 900;
   color: var(--title-blue);
-  padding: 8px 0 0 60px;
+  padding: 8px 0 0;
   letter-spacing: -0.5px;
+  text-align: center;
 }
 
 /* ===== SIGNAL SUMMARY TABLE ===== */
@@ -165,6 +165,7 @@ body {
   text-transform: uppercase;
   letter-spacing: 1px;
   margin-bottom: 6px;
+  text-align: center;
 }
 
 .summary-table {
@@ -298,7 +299,7 @@ body {
 
 /* ===== BRANDING ===== */
 .brand {
-  text-align: right;
+  text-align: center;
   font-size: 13px;
   font-weight: 700;
   font-style: italic;
@@ -334,7 +335,7 @@ body {
 
 /* ===== RESPONSIVE ===== */
 @media (max-width: 768px) {
-  .panel-title { font-size: 16px; padding-left: 40px; }
+  .panel-title { font-size: 16px; }
   .summary-table { font-size: 10px; }
   .summary-table th, .summary-table td { padding: 4px 5px; }
   .dashboard { padding: 8px 10px; }
@@ -347,27 +348,27 @@ body {
   <!-- HEADER -->
   <div class="header">
     <div class="header-left">
-      <h1>COT Signal Dashboard</h1>
-      <p>Commitments of Traders — Contrarian Positioning Analysis</p>
+      <h1>COT 시그널</h1>
+      <p>CFTC 선물 포지션 기반 역추세 분석 대시보드</p>
     </div>
-    <div class="last-update" id="lastUpdate">Loading...</div>
+    <div class="last-update" id="lastUpdate">로딩 중...</div>
   </div>
 
   <!-- SIGNAL SUMMARY TABLE -->
   <div class="summary-section">
-    <div class="summary-label">Signal Overview — All Assets</div>
+    <div class="summary-label">시그널 요약 — 전체 자산</div>
     <div style="overflow-x:auto;">
       <table class="summary-table" id="summaryTable">
         <thead>
           <tr>
-            <th>Asset</th>
-            <th>Price</th>
+            <th>자산</th>
+            <th>가격</th>
             <th>Z-Score</th>
-            <th>Signal</th>
-            <th>%ile</th>
-            <th>Signal</th>
-            <th>Spread Z</th>
-            <th>Signal</th>
+            <th>시그널</th>
+            <th>백분위</th>
+            <th>시그널</th>
+            <th>스프레드 Z</th>
+            <th>시그널</th>
           </tr>
         </thead>
         <tbody id="summaryBody"></tbody>
@@ -391,13 +392,13 @@ body {
   <!-- SIGNAL TYPE TABS -->
   <div class="tabs-row signal-tabs" id="signalTabs">
     <button class="tab-btn active" data-signal="zscore" onclick="setSignalType('zscore')">Z-Score</button>
-    <button class="tab-btn" data-signal="pctoi" onclick="setSignalType('pctoi')">% Open Interest</button>
-    <button class="tab-btn" data-signal="spread" onclick="setSignalType('spread')">Comm vs NonComm Spread</button>
+    <button class="tab-btn" data-signal="pctoi" onclick="setSignalType('pctoi')">미결제 약정 비율</button>
+    <button class="tab-btn" data-signal="spread" onclick="setSignalType('spread')">상업적 vs 투기적 스프레드</button>
   </div>
 
   <!-- PANEL 1: PRICE -->
   <div class="chart-panel">
-    <div class="panel-title" id="pricePanelTitle">Bitcoin</div>
+    <div class="panel-title" id="pricePanelTitle">비트코인</div>
     <div class="chart-wrap" style="height:200px;">
       <canvas id="priceChart"></canvas>
     </div>
@@ -405,7 +406,7 @@ body {
 
   <!-- PANEL 2: COMMERCIALS' NET POSITION -->
   <div class="chart-panel">
-    <div class="panel-title" style="font-size:17px;">Commercials' Net Position</div>
+    <div class="panel-title" id="commPanelTitle" style="font-size:17px;">상업적 거래자 순포지션</div>
     <div class="chart-wrap" style="height:220px;">
       <canvas id="commChart"></canvas>
     </div>
@@ -413,7 +414,7 @@ body {
 
   <!-- PANEL 3: LARGE SPECULATORS' NET POSITION -->
   <div class="chart-panel">
-    <div class="panel-title" style="font-size:17px;">Large Speculators' Net Position</div>
+    <div class="panel-title" id="specPanelTitle" style="font-size:17px;">대형 투기자 순포지션</div>
     <div class="chart-wrap" style="height:220px;">
       <canvas id="specChart"></canvas>
     </div>
@@ -422,19 +423,19 @@ body {
 
   <!-- SIGNAL HISTORY -->
   <div class="history-section">
-    <div class="summary-label">Signal History — <span id="historyAssetName">Bitcoin</span></div>
+    <div class="summary-label">시그널 히스토리 — <span id="historyAssetName">비트코인</span></div>
     <div class="history-scroll">
       <table class="history-table">
         <thead>
           <tr>
-            <th>Date</th>
-            <th>Type</th>
-            <th>Direction</th>
-            <th>Price</th>
-            <th>4W Return</th>
-            <th>8W Return</th>
-            <th>13W Return</th>
-            <th>26W Return</th>
+            <th>날짜</th>
+            <th>유형</th>
+            <th>방향</th>
+            <th>가격</th>
+            <th>4주 수익률</th>
+            <th>8주 수익률</th>
+            <th>13주 수익률</th>
+            <th>26주 수익률</th>
           </tr>
         </thead>
         <tbody id="historyBody"></tbody>
@@ -458,18 +459,25 @@ let specChart = null;
 
 const ASSET_ORDER = ['BTC','ETH','SP500','NASDAQ','RUSSELL','DXY','GOLD','SILVER','COPPER','OIL'];
 
+const ASSET_NAME_KR = {
+  'BTC': '비트코인', 'ETH': '이더리움', 'SP500': 'S&P 500',
+  'NASDAQ': '나스닥 100', 'RUSSELL': '러셀 2000', 'DXY': '달러 인덱스',
+  'GOLD': '금', 'SILVER': '은', 'COPPER': '구리', 'OIL': '원유 WTI'
+};
+
 // ============================================================
-// CHART.JS CUSTOM PLUGIN — Orange circle markers for signals
+// CHART.JS CUSTOM PLUGIN — Triangle markers for Buy/Sell signals
 // ============================================================
-const circleMarkerPlugin = {
-  id: 'circleMarkers',
+const signalMarkerPlugin = {
+  id: 'signalMarkers',
   afterDatasetDraw(chart) {
     const meta = chart.getDatasetMeta(0);
-    if (!meta || !chart.data._signalIndices) return;
+    if (!meta || !chart.data._signals) return;
     const ctx = chart.ctx;
-    const indices = chart.data._signalIndices;
+    const signals = chart.data._signals;  // [{idx, dir}, ...]
+    const size = 8;
     
-    indices.forEach(idx => {
+    signals.forEach(({ idx, dir }) => {
       const point = meta.data[idx];
       if (!point) return;
       const x = point.x;
@@ -477,16 +485,37 @@ const circleMarkerPlugin = {
       
       ctx.save();
       ctx.beginPath();
-      ctx.arc(x, y, 10, 0, Math.PI * 2);
-      ctx.strokeStyle = '#e8881f';
-      ctx.lineWidth = 2.5;
-      ctx.stroke();
+      
+      if (dir === 'bullish') {
+        // Green triangle pointing UP (▲)
+        ctx.moveTo(x, y - size - 4);
+        ctx.lineTo(x - size, y + size / 2 - 4);
+        ctx.lineTo(x + size, y + size / 2 - 4);
+        ctx.closePath();
+        ctx.fillStyle = '#22c55e';
+        ctx.fill();
+        ctx.strokeStyle = '#16a34a';
+        ctx.lineWidth = 1;
+        ctx.stroke();
+      } else {
+        // Red triangle pointing DOWN (▼)
+        ctx.moveTo(x, y + size + 4);
+        ctx.lineTo(x - size, y - size / 2 + 4);
+        ctx.lineTo(x + size, y - size / 2 + 4);
+        ctx.closePath();
+        ctx.fillStyle = '#ef4444';
+        ctx.fill();
+        ctx.strokeStyle = '#dc2626';
+        ctx.lineWidth = 1;
+        ctx.stroke();
+      }
+      
       ctx.restore();
     });
   }
 };
 
-Chart.register(circleMarkerPlugin);
+Chart.register(signalMarkerPlugin);
 
 // ============================================================
 // LOAD DATA
@@ -509,7 +538,7 @@ async function loadData() {
     initDashboard();
   } catch (e) {
     console.error('Failed to load data:', e);
-    document.getElementById('lastUpdate').textContent = 'Error loading data';
+    document.getElementById('lastUpdate').textContent = '데이터 로딩 실패';
   }
 }
 
@@ -557,7 +586,7 @@ function buildSummaryTable() {
     const priceStr = formatPrice(latest.price, key);
     
     tr.innerHTML = `
-      <td>${d.name}</td>
+      <td>${ASSET_NAME_KR[key] || d.name}</td>
       <td>${priceStr}</td>
       <td class="${zClass(latest.z_score)}">${latest.z_score > 0 ? '+' : ''}${latest.z_score.toFixed(2)}</td>
       <td>${signalBadge(latest.z_signal)}</td>
@@ -590,21 +619,21 @@ function pctClass(p) {
 
 function signalBadge(sig) {
   if (!sig) return '<span class="val-neutral">—</span>';
-  if (sig === 'bullish') return '<span class="signal-dot bullish"></span><span class="val-bullish" style="font-size:10px">BUY</span>';
-  return '<span class="signal-dot bearish"></span><span class="val-bearish" style="font-size:10px">SELL</span>';
+  if (sig === 'bullish') return '<span class="signal-dot bullish"></span><span class="val-bullish" style="font-size:10px">매수</span>';
+  return '<span class="signal-dot bearish"></span><span class="val-bearish" style="font-size:10px">매도</span>';
 }
 
 // ============================================================
-// HELPER: get signal indices
+// HELPER: get signal indices with direction
 // ============================================================
 function getSignalIndices(data) {
-  const indices = [];
+  const signals = [];
   data.forEach((row, i) => {
     const sig = currentSignal === 'zscore' ? row.z_signal :
                 currentSignal === 'pctoi' ? row.pct_signal : row.spread_signal;
-    if (sig === 'bullish' || sig === 'bearish') indices.push(i);
+    if (sig === 'bullish' || sig === 'bearish') signals.push({ idx: i, dir: sig });
   });
-  return indices;
+  return signals;
 }
 
 // ============================================================
@@ -726,10 +755,10 @@ function getDailyPriceData(asset, weeklyData) {
 
 function getSignalDailyIndices(weeklyData, dailyLabels) {
   /**
-   * Map weekly signal dates to nearest daily chart indices for circle markers.
+   * Map weekly signal dates to nearest daily chart indices for markers.
+   * Returns [{idx, dir}, ...] with direction info.
    */
-  const indices = [];
-  const dailyDates = new Set();
+  const signals = [];
   const dailyDateMap = {};
   dailyLabels.forEach((d, i) => { dailyDateMap[d] = i; });
 
@@ -737,23 +766,21 @@ function getSignalDailyIndices(weeklyData, dailyLabels) {
     const sig = currentSignal === 'zscore' ? row.z_signal :
                 currentSignal === 'pctoi' ? row.pct_signal : row.spread_signal;
     if (sig === 'bullish' || sig === 'bearish') {
-      // Find exact or nearest daily index
       if (dailyDateMap[row.date] !== undefined) {
-        indices.push(dailyDateMap[row.date]);
+        signals.push({ idx: dailyDateMap[row.date], dir: sig });
       } else {
-        // Find nearest date within ±5 days
         const target = new Date(row.date).getTime();
         let bestIdx = -1, bestDist = Infinity;
         for (let i = 0; i < dailyLabels.length; i++) {
           const dist = Math.abs(new Date(dailyLabels[i]).getTime() - target);
           if (dist < bestDist) { bestDist = dist; bestIdx = i; }
-          if (dist > bestDist && bestDist < 5 * 86400000) break; // Early exit
+          if (dist > bestDist && bestDist < 5 * 86400000) break;
         }
-        if (bestIdx >= 0 && bestDist < 10 * 86400000) indices.push(bestIdx);
+        if (bestIdx >= 0 && bestDist < 10 * 86400000) signals.push({ idx: bestIdx, dir: sig });
       }
     }
   });
-  return indices;
+  return signals;
 }
 
 function updateCharts() {
@@ -764,8 +791,8 @@ function updateCharts() {
   const cotLabels = cotData.map(r => r.date);
   const cotSignalIndices = getSignalIndices(cotData);
 
-  document.getElementById('pricePanelTitle').textContent = d.name;
-  document.getElementById('historyAssetName').textContent = d.name;
+  document.getElementById('pricePanelTitle').textContent = ASSET_NAME_KR[currentAsset] || d.name;
+  document.getElementById('historyAssetName').textContent = ASSET_NAME_KR[currentAsset] || d.name;
 
   // ---- PANEL 1: PRICE (daily data if available) ----
   const priceCtx = document.getElementById('priceChart').getContext('2d');
@@ -789,7 +816,7 @@ function updateCharts() {
         fill: false,
         tension: 0.05,
       }],
-      _signalIndices: priceSignalIndices
+      _signals: priceSignalIndices
     },
     options: {
       responsive: true,
@@ -855,7 +882,7 @@ function updateCharts() {
         },
         tension: 0.05,
       }],
-      _signalIndices: cotSignalIndices
+      _signals: cotSignalIndices
     },
     options: {
       responsive: true,
@@ -919,7 +946,7 @@ function updateCharts() {
         },
         tension: 0.05,
       }],
-      _signalIndices: cotSignalIndices
+      _signals: cotSignalIndices
     },
     options: {
       responsive: true,
@@ -970,18 +997,18 @@ function updateHistory() {
   tbody.innerHTML = '';
 
   if (history.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:#555;padding:20px;">No signals for this configuration</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:#555;padding:20px;">해당 설정에 시그널이 없습니다</td></tr>';
     return;
   }
 
   history.forEach(h => {
     const tr = document.createElement('tr');
-    const typeLabel = h.type === 'z_score' ? 'Z-Score' : h.type === 'pct_oi' ? '% OI' : 'Spread';
+    const typeLabel = h.type === 'z_score' ? 'Z-Score' : h.type === 'pct_oi' ? '미결제 비율' : '스프레드';
     
     tr.innerHTML = `
       <td style="font-family:'JetBrains Mono',monospace">${h.date}</td>
       <td>${typeLabel}</td>
-      <td><span class="badge badge-${h.direction}">${h.direction === 'bullish' ? '▲ BUY' : '▼ SELL'}</span></td>
+      <td><span class="badge badge-${h.direction}">${h.direction === 'bullish' ? '▲ 매수' : '▼ 매도'}</span></td>
       <td style="font-family:'JetBrains Mono',monospace">${formatPrice(h.price_at_signal, currentAsset)}</td>
       <td class="${returnClass(h.returns['4w'], h.direction)}">${formatReturn(h.returns['4w'])}</td>
       <td class="${returnClass(h.returns['8w'], h.direction)}">${formatReturn(h.returns['8w'])}</td>
@@ -1038,7 +1065,7 @@ function setPeriod(weeks) {
 function updateLastDate() {
   const d = DATA[ASSET_ORDER[0]];
   const lastDate = d.data[d.data.length - 1].date;
-  document.getElementById('lastUpdate').innerHTML = `Last COT: ${lastDate}<br>CFTC Weekly Report`;
+  document.getElementById('lastUpdate').innerHTML = `최근 COT: ${lastDate}<br>CFTC 주간 보고서`;
 }
 
 // ============================================================
