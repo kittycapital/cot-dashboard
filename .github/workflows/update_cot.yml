@@ -36,6 +36,10 @@ jobs:
             python scripts/fetch_cot_real.py --initial
           fi
 
+      - name: Generate daily price data
+        run: |
+          python scripts/generate_prices.py
+
       - name: Commit and push
         run: |
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
